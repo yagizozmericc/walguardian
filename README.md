@@ -37,4 +37,5 @@ npm run dev                  # http://localhost:3000
 - Address history comes from `LedgerService/ListTransactions` with an `affected_address` filter. When a provider fails, the UI shows the error. It never substitutes placeholder data.
 - Testnet assets have no market price, so balances are shown in token units and fiat valuation is marked unavailable.
 - Address analysis is **watch-only**. It does not prove wallet ownership.
+- **Save** tracks target and reserve goals funded only by amounts you explicitly earmark. Earmarks are checked against the live wallet balance. Goals are currently kept in a **temporary per-tab store** (clearly labelled) until Walrus Memory persistence is available.
 - **Protect** scores each sent transaction against the wallet's own earlier history using deterministic rules (`src/modules/security/rules.config.ts`). Anomalies are deviations, not proof of malicious activity. Analysis is historical with manual refresh. Guardian does not monitor in real time and cannot block transactions.

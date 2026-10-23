@@ -371,6 +371,17 @@ Use decimal-safe arithmetic for financial calculations.
 
 Goal progress must use explicitly allocated balances or a clearly defined tracking methodology.
 
+### Implemented model (2026-10-24)
+
+- **Goals.** A goal is a `target` (an amount by a date) or a `reserve` (a minimum set aside). Progress comes from **dated allocation events**, which earmark or release funds. The wallet balance is never counted toward a goal automatically.
+- **Coverage.** Earmarks are checked against the live Tatum balance. When an asset is over-committed, reserves are backed first and then targets oldest first. Progress uses the backed amount.
+- **Arithmetic.** All calculations use integer smallest units. The required monthly amount is rounded up. A month is 365.2425 / 12 days. The evaluation date is passed in, never read from the clock. The schedule compares against a straight-line plan from 0 on the start date to the target on the target date.
+- **Persistence.** Persistence is behind `GoalRepository`. Until Walrus Memory is available (blocker B1), the only implementation is a labelled temporary per-tab `sessionStorage` store. It is not durable, and the UI says so.
+
+### Pricing
+
+Valuation goes through a provider-independent `PriceProvider` interface. Every quote carries its source and timestamp, and a missing price is an explicit `unavailable` result, never an estimate. The only implementation today, `NoPriceProvider`, returns "unavailable", because Testnet assets have no market price. A CoinGecko provider is planned for verified Mainnet assets, matched by full coin type, never by symbol.
+
 ## 9. Investment Strategy Engine
 
 ### Responsibilities

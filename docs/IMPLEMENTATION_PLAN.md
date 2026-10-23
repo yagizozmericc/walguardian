@@ -1,7 +1,7 @@
 # Guardian AI — Implementation Plan
 
 **Last updated:** 2026-10-24
-**Status:** Phases 1–3 are complete. Phase 2 was verified against live Tatum Sui Testnet data, and Protect was exercised on live data and fixtures. Phase 4 has not been started. See [Progress log](#9-progress-log).
+**Status:** Phases 1–4 are complete. Savings runs on a labelled temporary store until Walrus Memory is available. Phase 5 has not been started. See [Progress log](#9-progress-log).
 **Network policy:** Testnet first. No Mainnet credentials, reads, or writes without explicit approval from the project owner.
 
 This plan follows `docs/PRD.md` and `docs/ARCHITECTURE.md`. It records what was verified against official documentation on 2026-10-24, and it changes the architecture where the docs required it.
@@ -197,16 +197,55 @@ The order follows the project owner's brief. Each phase ends with type-check, li
   - **No medium or high anomalies were present in the real data**, so the higher tiers are demonstrated with labelled fixtures.
 - **Carried to Phase 6:** feedback persistence, and the test that feedback cannot suppress critical signals. The engine already marks critical signals so that rule can be enforced.
 
-### Phase 4: Save
+### Phase 4: Save (done)
 **Depends on:** Phase 1.
-- Goal model, progress, remaining amount, required monthly contribution, schedule status (ahead / on track / behind), and estimated completion. Every assumption is shown.
-- Explicit asset allocation per goal: wallet balances are not counted toward a goal automatically.
-- Until Phase 6, goals live in a `GoalRepository` interface with a browser-local implementation labelled "Not yet saved to Walrus".
 
-**Acceptance:** savings maths is unit-tested, covering edge cases such as a past target date, zero contribution, and overfunding.
+**Delivered:**
+- **Contracts** (`modules/savings/savings.types.ts`, Zod), with two goal kinds:
+  - `target`: an amount by a date
+  - `reserve`: a minimum kept aside, with an optional date
+
+  Each goal has an asset, a target, an optional planned monthly contribution, notes, a start date, and dated **allocation events** (earmark or release). Funds count toward a goal only when explicitly earmarked.
+- **Engine** (`savings.engine.ts`, pure, integer units throughout):
+  - progress, floored to 0.1%
+  - remaining amount
+  - **required monthly**, rounded up to the smallest unit. A month is 365.2425 / 12 days, computed as an exact rational.
+  - straight-line schedule with a 1% tolerance: ahead, on track, behind, overdue, or completed
+  - completion projection at the planned contribution
+  - monthly shortfall
+  - allocation history
+- **Wallet coverage.** Earmarks are checked against the live Tatum balance. Reserves are backed first, then targets oldest first. Over-commitment is flagged, and progress uses the backed amount.
+- **Deterministic recommendations:** behind schedule (with the amount needed per month), plan too low, wallet holds less than earmarked, reserve below minimum, overdue, and no plan. Every evaluation lists its assumptions.
+- **API.** `POST /api/savings/evaluate` validates with Zod and with per-asset decimal checks. It verifies each asset's decimals against Tatum `GetCoinInfo` and rejects mismatches.
+- **Savings UI:**
+  - coverage band
+  - goals table with progress meters
+  - goal detail: key figures, schedule, progress chart (earmarked vs. plan, with hover), recommendations, earmark/release log, assumptions
+  - create, edit, and delete
+  - start dates in the past, so existing savings can be recorded
+- **Persistence boundary.** `GoalRepository` is an interface. The only implementation today is a **temporary per-tab store** (`sessionStorage`), labelled on the page as "Temporary demo storage": goals are lost when the tab closes and are not saved to Walrus. The Walrus-backed repository replaces it in Phase 6. No PostgreSQL is used.
+- **Pricing.** The `PriceProvider` interface (`modules/pricing`) has one implementation, `NoPriceProvider`. Testnet assets are never priced. A CoinGecko provider for verified Mainnet assets is planned behind the same interface and is not implemented.
+
+**Verification (2026-10-24):**
+- 30 savings unit tests with hand-computed values cover: on track, behind, ahead, plan shortfall, sufficient plan, completed, overdue, due today, no plan, floor rounding, 9-decimal exactness, reserves, coverage ordering, over-commitment, a coin no longer held, an unchecked balance, validation, and determinism.
+- Live API run against a Testnet wallet holding 99.968 SUI with 140 SUI earmarked:
+  - the reserve was fully backed and the target partially backed
+  - wrong decimals and over-precision returned 400 errors
+- A browser end-to-end run (headless Chrome) covered:
+  - creating goals, and the client-side rejection of a target goal without a date
+  - recording earmarks
+  - persistence across a reload in the same tab, and an empty state in a fresh browser context
+  - a backdated goal whose figures match hand calculation (334.805625 SUI per month, estimate 2027-06-04)
+  - no page errors
+
+**Not done, by design or blocked:**
+- Goal persistence and history depend on Walrus Memory (B1).
+- Recommendations triggered by changed liquidity preferences or new user context need Memory (Phase 6).
+- Percentage-of-portfolio goals ("keep 40% in stablecoins") need valuation and are handled in Phase 5.
+- The Overview page does not yet show savings progress, because goals exist only in the temporary store.
 
 ### Phase 5: Invest
-**Depends on:** Phase 2 and Q3 (pricing).
+**Depends on:** Phase 2 and Q3 (pricing). Decided: CoinGecko for verified Mainnet assets in the future. Testnet assets are never priced, and valuation stays provider-independent (`PriceProvider`).
 - Current vs. target allocation, drift, a liquidity and stablecoin-reserve check, and illustrative rebalancing amounts. No price is ever fabricated.
 
 **Acceptance:** allocation maths is unit-tested, and a missing price produces an explicit "unavailable" state.
@@ -279,7 +318,7 @@ The order follows the project owner's brief. Each phase ends with type-check, li
    - (a) Wait or report it to Walrus. This is recommended first.
    - (b) Self-host the relayer on Testnet. It needs Postgres with pgvector, Redis, an OpenAI embeddings key (a paid cost), and Testnet WAL and SUI.
    - (c) Use the **Mainnet** managed relayer for memory only, with sponsored writes and non-sensitive demo data. **This requires your explicit approval.**
-3. **Q3 (Phase 5).** What should the pricing source be for allocation percentages? Options are: a documented public price API applied to Testnet balances and labelled "illustrative Mainnet reference price"; user-entered reference prices labelled as assumptions; or token-unit allocations only.
+3. **Q3 (partly resolved).** CoinGecko will be used for verified Mainnet assets later, and Testnet prices are never invented. Still open for Phase 5: how Testnet allocation percentages should be shown. Options are (a) token-unit allocation only, with no cross-asset percentages, (b) user-entered reference prices labelled as assumptions, or (c) defer cross-asset allocation to Mainnet.
 4. **Q4.** Please confirm the hackathon rules, in particular whether ≥10 Walrus memory records are required and any mandatory Tatum products.
 5. **Q5 (Phase 7).** Is Anthropic Claude acceptable as the LLM provider? It needs an `ANTHROPIC_API_KEY`.
 6. **Q6.** Is a Sui wallet connection (dApp Kit) for verified ownership in scope, or are signed-cookie watch-only sessions enough for the demo?
@@ -310,3 +349,4 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | 1 Foundation | Done | The shell, design tokens, env guard, errors, logger, and `/api/status` are in place. Typecheck, lint, tests, and build pass. The `frontend-design` skill is not installed in this environment, so DESIGN.md was followed directly. |
 | 2026-10-24 | 2 Tatum | Done (verified live) | All acceptance checks pass against real Testnet data; see §1.1 Live verification. Fixes from verification: HTTP 429 mapped to a rate-limit error, request spacer and backoff, normalisation of the URL-form endpoint, and `check:tatum` now also reads `.env`. |
 | 2026-10-24 | 3 Protect | Done | The engine, API, and Security Center are complete, with 71 unit tests passing. Live runs covered three Testnet wallets. Limitations: the real data has no strong anomalies, so the higher tiers are shown only on fixtures. Analysis covers at most the 200 most recent transactions, because of the free-tier rate limit and node pruning below checkpoint 314,252,673. High-throughput wallets often span less than 3 days, so the frequency rule is skipped and reported for them. Feedback persistence waits on Phase 6 and B1. |
+| 2026-10-24 | 4 Save | Done | The engine, evaluate API, and Savings UI are complete, with 101 unit tests passing. The live API and a browser end-to-end run were verified. Persistence is a labelled temporary per-tab store behind `GoalRepository` because of B1. The `PriceProvider` abstraction was added. |
