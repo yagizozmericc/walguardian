@@ -36,6 +36,11 @@ describe("baseline", () => {
     expect(b.dailySentMean).toBeCloseTo(2, 0);
   });
 
+  it("counts package use per transaction, not per Move call", () => {
+    const multi = tx({ t: T0, packages: [DEX, DEX, DEX] });
+    expect(buildBaseline([multi]).packages[0]).toMatchObject({ packageId: DEX, count: 1 });
+  });
+
   it("ignores failed and incoming transactions", () => {
     const b = buildBaseline([
       tx({ t: T0, out: [{ sui: 5 }], recipients: [KNOWN[0]], success: false }),

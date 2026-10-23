@@ -82,6 +82,7 @@ export interface CounterpartyStat {
 export interface PackageStat {
   packageId: string;
   modules: string[];
+  /** Number of sent transactions that called the package. */
   count: number;
   firstSeenMs: number | null;
 }

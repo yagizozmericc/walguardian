@@ -34,7 +34,9 @@ export function Panel({
   children,
   className,
   bodyClassName,
+  id,
 }: {
+  id?: string;
   title?: React.ReactNode;
   meta?: React.ReactNode;
   actions?: React.ReactNode;
@@ -43,7 +45,7 @@ export function Panel({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn("rounded-lg border border-border bg-surface", className)}>
+    <section id={id} className={cn("rounded-lg border border-border bg-surface", className)}>
       {(title || actions || meta) && (
         <header className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
           <div className="flex min-w-0 items-baseline gap-3">

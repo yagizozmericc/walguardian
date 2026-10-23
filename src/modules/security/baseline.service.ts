@@ -100,11 +100,16 @@ export function buildBaseline(history: ActivityItem[]): BehavioralBaseline {
   // Move packages the wallet has called.
   const packageMap = new Map<string, PackageStat>();
   for (const a of sent) {
+    const countedThisTx = new Set<string>();
     for (const m of a.moveCalls) {
       if (FRAMEWORK_PACKAGES.has(m.package)) continue;
       const s = packageMap.get(m.package) ?? { packageId: m.package, modules: [], count: 0, firstSeenMs: a.timestampMs };
       if (!s.modules.includes(m.module)) s.modules.push(m.module);
-      s.count++;
+      // Count transactions that used the package, not individual calls.
+      if (!countedThisTx.has(m.package)) {
+        s.count++;
+        countedThisTx.add(m.package);
+      }
       packageMap.set(m.package, s);
     }
   }

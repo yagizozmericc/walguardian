@@ -66,7 +66,7 @@ export function summarize(
       summary:
         assessed.length === 0
           ? "No transactions sent by this address in the analysed history, so there is no behavior to compare against."
-          : `${assessed.length} sent transactions were analysed, but only ${outgoingCount} moved value out of the wallet — too few to establish a transfer baseline. Amount and recipient checks could not be applied.`,
+          : `${assessed.length} sent transactions were analysed, but ${outgoingCount === 0 ? "none" : `only ${outgoingCount}`} moved value out of the wallet — too few to establish a transfer baseline. Amount and recipient checks could not be applied.`,
     };
   }
   return {
