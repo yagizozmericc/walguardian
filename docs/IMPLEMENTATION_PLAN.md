@@ -1,7 +1,7 @@
 # Guardian AI — Implementation Plan
 
 **Last updated:** 2026-10-24
-**Status:** Phases 1–4 are complete. Savings runs on a labelled temporary store until Walrus Memory is available. Phase 5 has not been started. See [Progress log](#9-progress-log).
+**Status:** Phases 1–5 are complete. Savings and strategy settings run on labelled temporary stores until Walrus Memory is connected. The Walrus Mainnet integration is prepared (`docs/WALRUS_INTEGRATION.md`) and waits on owner account setup. See [Progress log](#9-progress-log).
 **Network policy:** Testnet first. No Mainnet credentials, reads, or writes without explicit approval from the project owner.
 
 This plan follows `docs/PRD.md` and `docs/ARCHITECTURE.md`. It records what was verified against official documentation on 2026-10-24, and it changes the architecture where the docs required it.
@@ -244,11 +244,63 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 - Percentage-of-portfolio goals ("keep 40% in stablecoins") need valuation and are handled in Phase 5.
 - The Overview page does not yet show savings progress, because goals exist only in the temporary store.
 
-### Phase 5: Invest
-**Depends on:** Phase 2 and Q3 (pricing). Decided: CoinGecko for verified Mainnet assets in the future. Testnet assets are never priced, and valuation stays provider-independent (`PriceProvider`).
-- Current vs. target allocation, drift, a liquidity and stablecoin-reserve check, and illustrative rebalancing amounts. No price is ever fabricated.
+### Phase 5: Invest (done)
+**Depends on:** Phase 2. Pricing decision: Testnet assets use **user-defined reference prices**, explicitly labelled as assumptions. CoinGecko is reserved for verified Mainnet assets later. Valuation stays behind the provider-neutral `PriceProvider` interface.
 
-**Acceptance:** allocation maths is unit-tested, and a missing price produces an explicit "unavailable" state.
+**Delivered:**
+- **Pricing:**
+  - `PriceQuote.basis` is either `market` or `user_reference`.
+  - `ReferencePriceProvider` serves the prices you enter.
+  - `resolvePrices` tries the market provider first, then your reference prices, and every result keeps its basis.
+  - On Testnet there is no market provider, so every price is user-provided.
+- **Strategy contracts** (`modules/strategy/strategy.types.ts`):
+  - optional class targets (SUI, stablecoins, other) that must total exactly 100%
+  - a drift band
+  - reference prices (positive, at most 8 decimals, dated)
+  - explicit exclusions
+  - a minimum stablecoin reserve in USD and a SUI gas reserve
+  - risk tolerance and horizon, recorded as context only; they change no number
+- **Engine** (`allocation.engine.ts`, pure):
+  - USD values are 1e-8 integers. Percentages use the largest-remainder method, so they always sum to exactly 100.00%.
+  - **If any analysed asset has no reference price or no published decimals, no cross-asset figures are produced at all**: the status is `incomplete`, with a named list of what is missing.
+  - Excluding an asset is an explicit user action and is reported in every result.
+- **Drift.** Current vs. target per class, flagged when outside the band.
+- **Rebalancing scenario.** It is illustrative only and nothing is executed.
+  - It never sells savings earmarks (passed in from Save) or the gas reserve.
+  - It respects the stablecoin minimum.
+  - When constrained, purchases are scaled down to the available proceeds.
+  - Value is conserved.
+  - It names the default purchase asset (USDC, SUI) for classes the wallet does not hold.
+  - Every constraint applied and every assumption is listed.
+- **Liquidity checks.** Gas reserve, earmarks above balance, stablecoin minimum, and exclusions. The first two work even without prices.
+- **API and UI.**
+  - `POST /api/strategy/evaluate`, with Zod validation and decimals from Tatum.
+  - The Strategy page shows:
+    - the assumption and temporary-storage notices
+    - an allocation table with current-vs-target dumbbells and the tolerance band
+    - the checks
+    - the scenario
+    - reference price entry with include/exclude
+    - a targets and constraints form
+  - Settings live in a labelled temporary per-tab store until Walrus.
+
+**Verification (2026-10-24):**
+- 27 strategy and pricing unit tests cover:
+  - allocation, largest remainder, drift inside and outside the band
+  - missing prices and missing decimals
+  - exclusions, empty results, zero balances, and the no-targets mode
+  - unconstrained rebalancing, plus earmark/gas-locked and stable-reserve-limited cases
+  - a default purchase asset, both priced and unpriced, and value-only purchases
+  - value conservation, schema validation, and determinism
+- Live API runs against Testnet wallets:
+  - With no price, the result is incomplete and no percentages are shown.
+  - The vault-token wallet stays incomplete because its tokens have no published decimals.
+  - A SUI wallet priced at $1.50 produced a constrained scenario: 29.878 SUI reduced and 44.817171 USDC added, because 70 SUI was locked by a 60 SUI earmark plus a 10 SUI gas reserve.
+- A browser end-to-end run covered:
+  - an unavailable result before prices
+  - a complete result after prices
+  - a scenario with the constraints after targets were set
+  - no page or server errors
 
 ### Phase 6: Walrus Memory
 **Depends on:** B1 resolved (or an approved alternative), Walrus credentials, and Phases 3–5.
@@ -299,7 +351,7 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 
 | ID | Risk | Likelihood | Mitigation |
 |---|---|---|---|
-| **B1** | Walrus Memory Testnet relayer and dashboard have a broken TLS certificate, so no Testnet account can be created and no call can be made. | Confirmed 2026-10-24 | Recheck before Phase 6. Alternatives in §7. TLS verification will never be disabled. |
+| **B1** | Walrus Memory Testnet relayer and dashboard have a broken TLS certificate (still broken on 2026-10-24). | **Resolved by decision** | The owner authorized the **Walrus Memory Mainnet hosted relayer** for development and demos, with non-sensitive synthetic data only. Tatum stays on Testnet. Setup steps, required transactions, and env vars are in `docs/WALRUS_INTEGRATION.md`. |
 | R1 | ~~Tatum's Testnet gRPC node may not serve the indexed `ListTransactions` API.~~ | **Resolved** | Verified working on 2026-10-24. |
 | R7 | The Tatum free-tier rate limit (HTTP 429 at a few requests per second) constrains history depth and refresh frequency. | Certain | Request spacer, backoff, bounded history (≤ 200 transactions for profiling), and short server-side caching. |
 | R8 | The node prunes history below checkpoint 314,252,673, so baselines only cover recent history. | Certain | Show the analysed window and lower confidence when it is short. |
@@ -314,10 +366,7 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 ## 7. Open questions for the project owner
 
 1. ~~**Q1.** Tatum Testnet API key.~~ Resolved: the key is configured in `.env`.
-2. **Q2 (B1, needed for Phase 6).** If the Walrus Memory Testnet relayer is still broken at Phase 6, which option do you prefer?
-   - (a) Wait or report it to Walrus. This is recommended first.
-   - (b) Self-host the relayer on Testnet. It needs Postgres with pgvector, Redis, an OpenAI embeddings key (a paid cost), and Testnet WAL and SUI.
-   - (c) Use the **Mainnet** managed relayer for memory only, with sponsored writes and non-sensitive demo data. **This requires your explicit approval.**
+2. ~~**Q2.**~~ Resolved: use the Walrus Memory Mainnet hosted relayer with synthetic data only. Account setup involves two sponsored Mainnet transactions that need the owner's confirmation (see `docs/WALRUS_INTEGRATION.md` §2).
 3. **Q3 (partly resolved).** CoinGecko will be used for verified Mainnet assets later, and Testnet prices are never invented. Still open for Phase 5: how Testnet allocation percentages should be shown. Options are (a) token-unit allocation only, with no cross-asset percentages, (b) user-entered reference prices labelled as assumptions, or (c) defer cross-asset allocation to Mainnet.
 4. **Q4.** Please confirm the hackathon rules, in particular whether ≥10 Walrus memory records are required and any mandatory Tatum products.
 5. **Q5 (Phase 7).** Is Anthropic Claude acceptable as the LLM provider? It needs an `ANTHROPIC_API_KEY`.
@@ -350,3 +399,5 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | 2 Tatum | Done (verified live) | All acceptance checks pass against real Testnet data; see §1.1 Live verification. Fixes from verification: HTTP 429 mapped to a rate-limit error, request spacer and backoff, normalisation of the URL-form endpoint, and `check:tatum` now also reads `.env`. |
 | 2026-10-24 | 3 Protect | Done | The engine, API, and Security Center are complete, with 71 unit tests passing. Live runs covered three Testnet wallets. Limitations: the real data has no strong anomalies, so the higher tiers are shown only on fixtures. Analysis covers at most the 200 most recent transactions, because of the free-tier rate limit and node pruning below checkpoint 314,252,673. High-throughput wallets often span less than 3 days, so the frequency rule is skipped and reported for them. Feedback persistence waits on Phase 6 and B1. |
 | 2026-10-24 | 4 Save | Done | The engine, evaluate API, and Savings UI are complete, with 101 unit tests passing. The live API and a browser end-to-end run were verified. Persistence is a labelled temporary per-tab store behind `GoalRepository` because of B1. The `PriceProvider` abstraction was added. |
+| 2026-10-24 | 5 Invest | Done | The allocation engine, reference-price pricing, strategy API, and Strategy UI are complete, with 128 unit tests passing. The live API and a browser end-to-end run were verified. |
+| 2026-10-24 | 6 Walrus prep | Prepared | Read-only research covered the SDK, account setup, authentication, write/read flow, and retention. No Mainnet writes were made. See `docs/WALRUS_INTEGRATION.md`. |
