@@ -743,6 +743,23 @@ Resolve these against current official documentation before implementation:
 
 Record verified answers and update this document accordingly.
 
+### Verified answers (2026-10-24)
+
+Full detail and sources are in `docs/IMPLEMENTATION_PLAN.md` §1.
+
+1. **Tatum transaction discovery.** Tatum exposes Sui Testnet over **gRPC only** (`sui-testnet-grpc.gateway.tatum.io:443`, with an `x-api-key` metadata header). JSON-RPC is deprecated on Sui, and public fullnodes reject it. Address history uses `LedgerService/ListTransactions` with a `TransactionFilter` (`affected_address` / `sender`) and cursor pagination through `QueryOptions`. Whether Tatum's Testnet node serves this indexed API is still unverified until a key is available.
+2. **Normalisation.** `ExecutedTransaction` (with `read_mask`) provides balance changes, effects, and the programmable transaction commands. Move calls are taken from the `MoveCall` commands, and amounts from `balance_changes`. These are mapped in `sui.adapter.ts`.
+3. **Walrus Memory SDK.** `@mysten-incubation/memwal` provides `remember` / `rememberAndWait` (async job ending in a `blob_id`), `recall` (semantic, `limit` ≤ 100, `sort: "recent"`), `listMemories` (metadata only), `restore`, and `health`. There is no delete method. Auth uses an Ed25519 delegate key plus a `MemWalAccount` ID. The Testnet relayer is `relayer-staging.memory.walrus.xyz`, and on 2026-10-24 it was serving an invalid TLS certificate (blocker B1).
+4. **Privacy.** Content is Seal-encrypted on Walrus, which is public and immutable. The managed relayer sees plaintext. Namespaces are not a security boundary, so the server must enforce the mapping from principal to namespace.
+5. **Price source.** None is available for Testnet assets. Balances are token-denominated until the price source is decided (open question Q3).
+6. **Authentication.** Memories are keyed to a signed-cookie session principal, or to a verified wallet (signed personal message). They are never keyed to a bare public address.
+7. **Hackathon requirements.** No public rules were found under the name "Total Recall", so this is still open (Q4).
+
+**Resulting changes:**
+- The blockchain adapter is gRPC.
+- PostgreSQL is deferred, and Walrus is the store of record for goals, preferences, and decisions, read with newest-wins supersession.
+- Memory namespaces follow the pattern `guardian:v1:<principal>:<category>`.
+
 ## 20. Definition of Done
 
 The architecture is successfully implemented when:
