@@ -314,6 +314,22 @@ Avoid presenting anomalies as confirmed malicious activity.
 
 When history is insufficient, explicitly report low confidence.
 
+### Implemented model (protect-rules/1, 2026-10-24)
+
+- **Point-in-time evaluation.** Each historical transaction sent by the wallet is a `Candidate`, scored against a baseline built only from strictly earlier transactions. The same `Candidate` shape will score hypothetical transfers in the unified assessment.
+- **Input data.**
+  - Up to the 200 most recent contiguous transactions from the Tatum `ListTransactions` `affected_address` query, plus current balances.
+  - Balances immediately before each transaction are reconstructed by walking backwards from the current balances. If the walk ever goes negative, it is marked unreliable from that point on, and the large-outflow rule reports a limitation instead of guessing.
+  - The history loader re-checks the newest digest after fetching balances, so both describe the same moment.
+- **Assessment output.** `SecurityAssessment` adds `limitations` (rules that could not be evaluated, with the reason), `notes` (evaluated but intentionally scored zero), `baselineSize`, and `critical` on each signal. Severity includes `none`. Confidence includes `insufficient`.
+- **Scope.** Only successful transactions sent by the wallet are assessed. Incoming transfers and failed transactions are excluded, and the Security Center states this.
+- **No LLM in scoring.** Explanations are deterministic templates. Phase 7 may add LLM explanations, but they must cite these signals and must not change scores.
+- **Known limitations.**
+  - Pruned history: the node serves only from checkpoint 314,252,673 onward.
+  - High-throughput wallets often span less than 3 days within 200 transactions, so the frequency rule is skipped for them.
+  - DEX swaps against shared-object pools have no recipient address, so the new-recipient rule does not apply to them.
+  - Monitoring is historical with manual refresh. Nothing runs in real time, and nothing blocks transactions.
+
 ### Feedback
 
 Users may classify an alert as:

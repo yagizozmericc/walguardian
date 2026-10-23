@@ -1,7 +1,7 @@
 # Guardian AI — Implementation Plan
 
 **Last updated:** 2026-10-24
-**Status:** Phases 1 and 2 are complete. Phase 2 was verified against live Tatum Sui Testnet data on 2026-10-24. Phase 3 is in progress. See [Progress log](#9-progress-log).
+**Status:** Phases 1–3 are complete. Phase 2 was verified against live Tatum Sui Testnet data, and Protect was exercised on live data and fixtures. Phase 4 has not been started. See [Progress log](#9-progress-log).
 **Network policy:** Testnet first. No Mainnet credentials, reads, or writes without explicit approval from the project owner.
 
 This plan follows `docs/PRD.md` and `docs/ARCHITECTURE.md`. It records what was verified against official documentation on 2026-10-24, and it changes the architecture where the docs required it.
@@ -152,16 +152,50 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 - If Tatum is unreachable or rejects the key, the UI shows an explicit integration error, never fabricated data.
 - Normalisation unit tests pass on recorded fixtures, which are labelled.
 
-### Phase 3: Protect
+### Phase 3: Protect (done)
 **Depends on:** Phase 2.
-- Baseline: median, p75, p90, and p95 outgoing amounts per coin, known recipients, transaction frequency (daily mean and standard deviation), known Move packages, and recent outflow ratio.
-- Rules engine (configurable weights) for: large amount vs. percentile, new recipient, frequency spike, first-time package, large outflow share of holdings, and pattern deviation. Score from 0 to 100, severity, confidence (low below 10 transactions), and the evidence for each signal.
-- Security Center: status, anomaly list, transaction detail, baseline panel, and feedback controls (expected / suspicious / not sure, plus an explanation). Feedback is held in a pending state until Phase 6.
 
-**Acceptance:**
-- Scoring is deterministic and unit-tested, including the sparse-history case.
-- Language never states "malicious".
-- Critical signals cannot be suppressed by feedback (tested).
+**Delivered:**
+- Point-in-time baselines (`modules/security/baseline.service.ts`). Each sent transaction is scored only against transactions strictly before it, so it never contributes to its own baseline. The baseline records:
+  - per-coin median, p75, p90, p95, and max (nearest-rank percentiles on exact integers)
+  - known recipients and the wallet's own new-recipient rate
+  - non-framework Move packages, counted per transaction
+  - sends per day (mean and σ, only when the window spans 3 days or more)
+- Rules `protect-rules/1` (`rules.config.ts`, `anomaly.engine.ts`):
+
+  | Rule | Requires | Points |
+  |---|---|---|
+  | Unusual amount vs. that coin's p95 | ≥ 5 prior transfers of the coin | 15 / 25 / 35 above 1× / 2× / 5× p95 |
+  | New recipient | ≥ 5 prior transfers with recipients | Up to 20, scaled by (1 − the wallet's novelty rate) |
+  | Frequency spike (24 h count vs. daily baseline) | ≥ 3 days of prior history | 10 at z ≥ 2.5, 20 at z ≥ 4 |
+  | First-time Move package | ≥ 5 prior sent transactions | 15 |
+  | Large outflow vs. reconstructed balance before the transaction | A consistent balance walk | 15 at ≥ 25%, 30 at ≥ 50%, 40 (critical) at ≥ 80% |
+  | First outgoing transfer of an asset | ≥ 5 prior transfers | 10 |
+
+- Scoring (`risk.engine.ts`):
+  - The score is the sum of rule points, capped at 100.
+  - Severity is high at ≥ 60, medium at ≥ 30, and low above 0.
+  - **A critical signal forces high severity.** Two cases are critical: ≥ 80% outflow, and an amount above 5× p95 sent to a never-paid recipient.
+  - Confidence comes from the number of prior transfers: fewer than 5 is insufficient, fewer than 15 low, fewer than 40 medium, otherwise high.
+- Explanations come from deterministic templates. Every signal carries evidence (statistics, values, and digests). Rules that cannot be evaluated return a **limitation**. Rules that were evaluated but scored zero by design return a **note**.
+- The wallet status is "attention required", "review recommended", "no significant deviations" (never "safe"), or "insufficient history". The last is used when fewer than 5 value transfers exist and nothing high fired.
+- `GET /api/security/[address]` and the Security Center page:
+  - status band
+  - flagged and all transaction lists
+  - per-transaction score breakdown
+  - behavioral profile
+  - methodology notes
+  - feedback controls, shown disabled until Phase 6
+- `npm run check:protect -- 0x…` runs on live Testnet data. `npm run demo:protect` runs on labelled fixtures.
+
+**Acceptance (met):**
+- Scoring is deterministic. 28 Protect unit tests cover the normal, large-amount, new-recipient, frequency-spike, large-outflow, insufficient-history, and multiple-signal cases, plus novelty weighting, the point-in-time baseline, and wording that never says "malicious" or "attack".
+- Real-data check on 2026-10-24 against three Testnet wallets:
+  - The faucet-style sender produced 36 low new-recipient signals, down-weighted because 25% of its transfers go to new recipients.
+  - The BTC-bridge relayer was correctly reported as insufficient history, with 0 value transfers out of 180 sent.
+  - The oracle bot produced no transfer signals.
+  - **No medium or high anomalies were present in the real data**, so the higher tiers are demonstrated with labelled fixtures.
+- **Carried to Phase 6:** feedback persistence, and the test that feedback cannot suppress critical signals. The engine already marks critical signals so that rule can be enforced.
 
 ### Phase 4: Save
 **Depends on:** Phase 1.
@@ -275,3 +309,4 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | Plan | Done | This document. |
 | 2026-10-24 | 1 Foundation | Done | The shell, design tokens, env guard, errors, logger, and `/api/status` are in place. Typecheck, lint, tests, and build pass. The `frontend-design` skill is not installed in this environment, so DESIGN.md was followed directly. |
 | 2026-10-24 | 2 Tatum | Done (verified live) | All acceptance checks pass against real Testnet data; see §1.1 Live verification. Fixes from verification: HTTP 429 mapped to a rate-limit error, request spacer and backoff, normalisation of the URL-form endpoint, and `check:tatum` now also reads `.env`. |
+| 2026-10-24 | 3 Protect | Done | The engine, API, and Security Center are complete, with 71 unit tests passing. Live runs covered three Testnet wallets. Limitations: the real data has no strong anomalies, so the higher tiers are shown only on fixtures. Analysis covers at most the 200 most recent transactions, because of the free-tier rate limit and node pruning below checkpoint 314,252,673. High-throughput wallets often span less than 3 days, so the frequency rule is skipped and reported for them. Feedback persistence waits on Phase 6 and B1. |
