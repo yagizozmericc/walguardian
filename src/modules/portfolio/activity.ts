@@ -49,10 +49,14 @@ export function deriveActivity(
   const outCoins = new Set(transfers.filter((t) => BigInt(t.rawAmount) < 0n).map((t) => t.coinType));
   const inCoins = new Set(transfers.filter((t) => BigInt(t.rawAmount) > 0n).map((t) => t.coinType));
   const counterparties = new Set<string>();
+  const recipients = new Set<string>();
   for (const c of tx.balanceChanges) {
     if (c.address === watched) continue;
     const v = BigInt(c.amount);
-    if (outCoins.has(c.coinType) && v > 0n) counterparties.add(c.address);
+    if (outCoins.has(c.coinType) && v > 0n) {
+      counterparties.add(c.address);
+      recipients.add(c.address);
+    }
     if (inCoins.has(c.coinType) && v < 0n) counterparties.add(c.address);
   }
   if (!isSender && hasIn && tx.sender) counterparties.add(tx.sender);
@@ -68,6 +72,7 @@ export function deriveActivity(
     direction,
     transfers,
     counterparties: [...counterparties],
+    recipients: [...recipients],
     gasFeeMist: tx.gasFeeMist,
     moveCalls: tx.moveCalls,
   };

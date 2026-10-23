@@ -43,6 +43,8 @@ export interface ActivityItem {
   transfers: ActivityTransfer[];
   /** Other addresses on the opposite side of the watched address's balance changes. */
   counterparties: string[];
+  /** Addresses that received a coin the watched address sent in this transaction. */
+  recipients: string[];
   gasFeeMist: string | null;
   moveCalls: MoveCallRef[];
 }

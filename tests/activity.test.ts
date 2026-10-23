@@ -18,6 +18,7 @@ describe("deriveActivity", () => {
       { coinType: SUI, symbol: "SUI", decimals: 9, rawAmount: "-2500000000", amount: "-2.5", gasExcluded: true },
     ]);
     expect(a.counterparties).toEqual([RECIPIENT]);
+    expect(a.recipients).toEqual([RECIPIENT]);
   });
 
   it("identifies incoming transfers and the paying counterparty", () => {
@@ -25,6 +26,7 @@ describe("deriveActivity", () => {
     expect(a.direction).toBe("in");
     expect(a.transfers[0]).toMatchObject({ amount: "100", gasExcluded: false });
     expect(a.counterparties).toEqual([SENDER]);
+    expect(a.recipients).toEqual([]);
   });
 
   it("classifies multi-asset changes as a swap", () => {

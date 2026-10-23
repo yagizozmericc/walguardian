@@ -1,44 +1,10 @@
 import "server-only";
 import { formatUnits } from "@/lib/units";
-import { logger } from "@/lib/logger";
-import type { BlockchainProvider, CoinMetadata } from "@/modules/blockchain/blockchain.types";
 import type { SuiTatumProvider } from "@/modules/blockchain/sui.adapter";
 import { classifyAsset } from "./assets";
 import { deriveActivity } from "./activity";
+import { loadCoinMetadata } from "./metadata";
 import type { Holding, PortfolioSnapshot } from "./portfolio.types";
-
-const METADATA_CONCURRENCY = 2;
-
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
-  return out;
-}
-
-/** Fetches metadata per coin type; a failed lookup leaves that coin's decimals unknown instead of guessed. */
-async function loadMetadata(
-  provider: BlockchainProvider,
-  coinTypes: string[],
-  warnings: string[],
-): Promise<Map<string, CoinMetadata>> {
-  const map = new Map<string, CoinMetadata>();
-  await mapLimit(coinTypes, METADATA_CONCURRENCY, async (coinType) => {
-    try {
-      map.set(coinType, await provider.getCoinMetadata(coinType));
-    } catch (err) {
-      logger.warn("portfolio.metadata_unavailable", { coinType, message: (err as Error).message });
-      warnings.push(`Metadata unavailable for ${coinType}; amount shown in raw units.`);
-    }
-  });
-  return map;
-}
 
 export async function getPortfolioSnapshot(
   provider: SuiTatumProvider,
@@ -54,7 +20,7 @@ export async function getPortfolioSnapshot(
   const warnings: string[] = [];
   const coinTypes = new Set(balances.map((b) => b.coinType));
   for (const tx of page.transactions) for (const c of tx.balanceChanges) if (c.address === address) coinTypes.add(c.coinType);
-  const metadata = await loadMetadata(provider, [...coinTypes], warnings);
+  const metadata = await loadCoinMetadata(provider, [...coinTypes], warnings);
 
   const source = provider.source();
   const holdings: Holding[] = balances
