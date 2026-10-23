@@ -28,3 +28,26 @@ export function formatUnits(raw: string | bigint, decimals: number): string {
 export function absBigInt(v: bigint): bigint {
   return v < 0n ? -v : v;
 }
+
+const DECIMAL = /^-?\d+(\.\d+)?$/;
+
+/**
+ * Parses an exact decimal string into integer smallest units, e.g. ("1.5", 9) → 1500000000n.
+ * Rejects more fractional digits than the coin supports instead of rounding.
+ */
+export function parseUnits(value: string, decimals: number): bigint {
+  const v = value.trim();
+  if (!DECIMAL.test(v)) throw new RangeError(`Not a decimal amount: ${value}`);
+  const negative = v.startsWith("-");
+  const [whole, frac = ""] = (negative ? v.slice(1) : v).split(".");
+  if (frac.length > decimals) throw new RangeError(`At most ${decimals} decimal places are allowed.`);
+  const raw = BigInt(whole) * 10n ** BigInt(decimals) + BigInt(frac.padEnd(decimals, "0") || "0");
+  return negative ? -raw : raw;
+}
+
+/** Integer division rounding toward +infinity (for amounts that must be sufficient). */
+export function ceilDiv(a: bigint, b: bigint): bigint {
+  if (b <= 0n) throw new RangeError("Divisor must be positive.");
+  if (a <= 0n) return -((-a) / b);
+  return (a + b - 1n) / b;
+}
