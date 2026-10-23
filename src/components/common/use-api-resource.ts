@@ -10,8 +10,8 @@ export type ResourceState<T> =
   | { status: "error"; error: DisplayError }
   | { status: "ready"; data: T; refreshing: boolean };
 
-export async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, { signal, cache: "no-store" });
+export async function fetchJson<T>(url: string, signal?: AbortSignal, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, { ...init, signal, cache: "no-store" });
   const body = await res.json().catch(() => null);
   if (!res.ok) {
     const e = (body as ApiErrorBody | null)?.error;
