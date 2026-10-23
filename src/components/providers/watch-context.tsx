@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useSyncExternalStore } from "react";
+import { SuiAddressSchema } from "@/lib/sui-address";
 
 /**
  * The public address currently being analysed. Watch-only: holding an address
@@ -47,6 +48,17 @@ export function WatchProvider({ children }: { children: React.ReactNode }) {
     }
     listeners.forEach((l) => l());
   }, []);
+
+  // A shareable ?address=0x… link seeds the watched address once, then is removed from the URL.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const param = url.searchParams.get("address");
+    if (!param) return;
+    const parsed = SuiAddressSchema.safeParse(param);
+    if (parsed.success) setAddress(parsed.data);
+    url.searchParams.delete("address");
+    window.history.replaceState(null, "", url);
+  }, [setAddress]);
 
   return <WatchContext.Provider value={{ address, setAddress }}>{children}</WatchContext.Provider>;
 }

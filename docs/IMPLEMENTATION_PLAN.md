@@ -1,7 +1,7 @@
 # Guardian AI — Implementation Plan
 
 **Last updated:** 2026-10-24
-**Status:** Phase 1 and Phase 2 in progress. See [Progress log](#9-progress-log).
+**Status:** Phase 1 is complete. Phase 2 is code-complete, and live verification is waiting on a Tatum Testnet key (Q1). See [Progress log](#9-progress-log).
 **Network policy:** Testnet first. No Mainnet credentials, reads, or writes without explicit approval from the project owner.
 
 This plan follows `docs/PRD.md` and `docs/ARCHITECTURE.md`. It records what was verified against official documentation on 2026-10-24, and it changes the architecture where the docs required it.
@@ -261,5 +261,5 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 |---|---|---|---|
 | 2026-10-24 | Validation | Done | Findings in §1. B1 and R1 raised. |
 | 2026-10-24 | Plan | Done | This document. |
-| 2026-10-24 | 1 Foundation | In progress | |
-| 2026-10-24 | 2 Tatum | In progress | Code complete. Live verification blocked on Q1. |
+| 2026-10-24 | 1 Foundation | Done | The shell, design tokens, env guard, errors, logger, and `/api/status` are in place. Typecheck, lint, tests, and build pass. The `frontend-design` skill is not installed in this environment, so DESIGN.md was followed directly. |
+| 2026-10-24 | 2 Tatum | Code complete, live verification pending | The gRPC client, normalisation, portfolio service, `GET /api/portfolio/[address]`, and Overview holdings and activity are built. The transport was verified live without a key: protos load, TLS succeeds, and the gateway's HTTP 401 maps to `PROVIDER_UNAUTHORIZED`. **Not yet verified:** real balances and `ListTransactions` support on Tatum Testnet (R1), and the `GetServiceInfo.chain` label used for the network assertion. Next step: `npm run check:tatum -- 0x…` with a key. |

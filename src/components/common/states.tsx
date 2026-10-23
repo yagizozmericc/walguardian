@@ -48,7 +48,11 @@ export function ErrorState({
       <AlertTriangle className="mt-0.5 size-4 shrink-0 text-critical" strokeWidth={1.75} />
       <div className="min-w-0 space-y-1">
         <p className="text-sm font-medium">
-          {source ? `${source} request failed` : "Request failed"}
+          {error.code === "CONFIG_MISSING"
+            ? "Integration not configured"
+            : source
+              ? `${source} request failed`
+              : "Request failed"}
         </p>
         <p className="text-[13px] text-muted-foreground">{error.message}</p>
         <p className="font-mono text-[11px] text-subtle">
