@@ -30,6 +30,20 @@ describe("parseEnv", () => {
     ).toThrow(ConfigError);
   });
 
+  it("normalizes URL-form endpoints to host:port", () => {
+    expect(parseEnv({ TATUM_SUI_GRPC_ENDPOINT: "https://sui-testnet-grpc.gateway.tatum.io" }).tatum.grpcEndpoint).toBe(
+      "sui-testnet-grpc.gateway.tatum.io:443",
+    );
+    expect(parseEnv({ TATUM_SUI_GRPC_ENDPOINT: "https://sui-testnet-grpc.gateway.tatum.io:8443/" }).tatum.grpcEndpoint).toBe(
+      "sui-testnet-grpc.gateway.tatum.io:8443",
+    );
+  });
+
+  it("rejects plaintext or malformed endpoints", () => {
+    expect(() => parseEnv({ TATUM_SUI_GRPC_ENDPOINT: "http://sui-testnet-grpc.gateway.tatum.io" })).toThrow(ConfigError);
+    expect(() => parseEnv({ TATUM_SUI_GRPC_ENDPOINT: "sui-testnet-grpc.gateway.tatum.io/path" })).toThrow(ConfigError);
+  });
+
   it("rejects unknown networks", () => {
     expect(() => parseEnv({ SUI_NETWORK: "devnet" })).toThrow(ConfigError);
   });

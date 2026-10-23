@@ -1,7 +1,7 @@
 # Guardian AI — Implementation Plan
 
 **Last updated:** 2026-10-24
-**Status:** Phase 1 is complete. Phase 2 is code-complete, and live verification is waiting on a Tatum Testnet key (Q1). See [Progress log](#9-progress-log).
+**Status:** Phases 1 and 2 are complete. Phase 2 was verified against live Tatum Sui Testnet data on 2026-10-24. Phase 3 is in progress. See [Progress log](#9-progress-log).
 **Network policy:** Testnet first. No Mainnet credentials, reads, or writes without explicit approval from the project owner.
 
 This plan follows `docs/PRD.md` and `docs/ARCHITECTURE.md`. It records what was verified against official documentation on 2026-10-24, and it changes the architecture where the docs required it.
@@ -20,10 +20,20 @@ Sources: [Tatum Sui reference](https://docs.tatum.io/reference/rpc-sui.md), [Tat
 | JSON-RPC status | Sui deprecated JSON-RPC. Public Testnet fullnodes now return `-32601 Method not found ... JSON-RPC on public fullnodes has been deprecated`. | Do not build on `suix_queryTransactionBlocks`. |
 | Authentication | API key in the `x-api-key` header, sent as gRPC metadata. Free accounts include separate Mainnet and Testnet keys. | `TATUM_API_KEY` must be the **Testnet** key, and it stays server-side. |
 | Balances | `StateService/ListBalances`, `StateService/GetBalance`, `StateService/GetCoinInfo` (symbol and decimals). | Portfolio balances and metadata. |
-| Transaction history | `LedgerService/ListTransactions` (server-streaming, stable in sui-apis since 2026-07-20) accepts a `TransactionFilter` with `sender` and `affected_address` predicates, cursor pagination (`QueryOptions.after`/`before`), and ordering. | Address-indexed history is possible over gRPC. **Whether Tatum's Testnet node serves this indexed API is unverified until a Testnet key is available. This is risk R1.** |
+| Transaction history | `LedgerService/ListTransactions` (server-streaming, stable in sui-apis since 2026-07-20) accepts a `TransactionFilter` with `sender` and `affected_address` predicates, cursor pagination (`QueryOptions.after`/`before`), and ordering. | **Verified 2026-10-24 on Tatum Testnet.** The `affected_address` filter, descending order, and `before`-cursor pagination all work (two pages of 30 equal one page of 60, with no gaps or duplicates). History is served from checkpoint 314,252,673 onward; older activity is pruned. |
 | Transaction detail | `LedgerService/GetTransaction`, `BatchGetTransactions` with `read_mask`. | Detail view and balance changes. |
 | Health and network check | `LedgerService/GetServiceInfo` returns the chain identity and checkpoint height. | Confirms we are connected to Testnet before any query. |
 | Error semantics | gRPC code 16 = bad key, 5 = pruned or not found, 14 = unavailable. Numbers come back as strings (use `BigInt`). | Typed provider errors and decimal-safe parsing. |
+
+#### Live verification (2026-10-24, Tatum Sui Testnet, real key)
+
+- **Network identity.** `GetServiceInfo` returns `chain: "testnet"`, so the network assertion holds.
+- **Balances.** `ListBalances` and `GetCoinInfo` work. Testnet USDC metadata is confirmed as symbol `USDC` with 6 decimals. Coin types without registered `CoinMetadata` (for example vault and PT tokens) return `NOT_FOUND`, and the app shows them in raw units, never with guessed decimals.
+- **Transactions.** Three real addresses were checked: an oracle bot, a faucet-style sender, and a BTC-bridge relayer. Net gas is computed as computation + storage − rebate, and it equals the sender's balance change on gas-only transactions. The transferred SUI amount excludes gas. Inflows identify the payer. Move calls are extracted, for example `pyth_lazer::parse_and_verify_le_ecdsa_update` and `deposit::confirm_deposit`.
+- **Integrity.** For 8 of 8 sampled digests, the list result is identical to `GetTransaction`. None of the 120 checked transactions is missing a timestamp, sender, gas, or status.
+- **Classification note.** Transactions in which the watched address only pays gas while a contract mints or moves value to third parties (bridge relayers) are classified as `none` ("Interaction") for that address. This is correct, because no value left the watched wallet.
+- **Rate limits.** The gateway returns **HTTP 429**, which grpc-js surfaces as `UNAVAILABLE`, when more than a few requests per second are sent. These are now mapped to `PROVIDER_RATE_LIMITED`. A client-side request spacer (`TATUM_MAX_RPS`, default 3) and exponential backoff keep calls within the plan's limit.
+- **Endpoint format.** Tatum's docs show the URL form `https://sui-testnet-grpc.gateway.tatum.io`. `env.ts` normalises it to `host:443` and rejects non-TLS schemes.
 
 Decision: implement the Tatum adapter with `@grpc/grpc-js` and `@grpc/proto-loader`, which Tatum documents. Protos are vendored from `MystenLabs/sui-apis` at commit `aa9ba2c` (Apache-2.0) under `proto/`.
 
@@ -217,7 +227,9 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 | ID | Risk | Likelihood | Mitigation |
 |---|---|---|---|
 | **B1** | Walrus Memory Testnet relayer and dashboard have a broken TLS certificate, so no Testnet account can be created and no call can be made. | Confirmed 2026-10-24 | Recheck before Phase 6. Alternatives in §7. TLS verification will never be disabled. |
-| R1 | Tatum's Testnet gRPC node may not serve the new indexed `ListTransactions` API. | Medium | Verify with `scripts/check-tatum.ts` as soon as a key is available. If unsupported: use `SubscriptionService` polling for forward-only monitoring plus `GetTransaction` for known digests, and escalate before any non-Tatum provider is used. |
+| R1 | ~~Tatum's Testnet gRPC node may not serve the indexed `ListTransactions` API.~~ | **Resolved** | Verified working on 2026-10-24. |
+| R7 | The Tatum free-tier rate limit (HTTP 429 at a few requests per second) constrains history depth and refresh frequency. | Certain | Request spacer, backoff, bounded history (≤ 200 transactions for profiling), and short server-side caching. |
+| R8 | The node prunes history below checkpoint 314,252,673, so baselines only cover recent history. | Certain | Show the analysed window and lower confidence when it is short. |
 | R2 | The Testnet wallet used for the demo needs enough organic history for a meaningful baseline. | Medium | Seed a Testnet wallet with a deliberate pattern of Testnet transfers (faucet funds only), then one outlier. Only real onchain transactions, no fixtures in the live path. |
 | R3 | The managed relayer sees plaintext, and Walrus data cannot be deleted before expiry. | Certain | Disclose in the UI and README. Store only non-sensitive demo data. A future option is `MemWalManual` for client-side encryption. |
 | R4 | Semantic recall used as a read model can miss records once a namespace grows beyond 100. | Low for the MVP | Use per-category namespaces and `listMemories` counts to detect gaps. Add Postgres references if needed. |
@@ -228,7 +240,7 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 
 ## 7. Open questions for the project owner
 
-1. **Q1 (needed for Phase 2).** Please add a **Tatum Testnet API key** to `.env.local` as `TATUM_API_KEY`.
+1. ~~**Q1.** Tatum Testnet API key.~~ Resolved: the key is configured in `.env`.
 2. **Q2 (B1, needed for Phase 6).** If the Walrus Memory Testnet relayer is still broken at Phase 6, which option do you prefer?
    - (a) Wait or report it to Walrus. This is recommended first.
    - (b) Self-host the relayer on Testnet. It needs Postgres with pgvector, Redis, an OpenAI embeddings key (a paid cost), and Testnet WAL and SUI.
@@ -262,4 +274,4 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | Validation | Done | Findings in §1. B1 and R1 raised. |
 | 2026-10-24 | Plan | Done | This document. |
 | 2026-10-24 | 1 Foundation | Done | The shell, design tokens, env guard, errors, logger, and `/api/status` are in place. Typecheck, lint, tests, and build pass. The `frontend-design` skill is not installed in this environment, so DESIGN.md was followed directly. |
-| 2026-10-24 | 2 Tatum | Code complete, live verification pending | The gRPC client, normalisation, portfolio service, `GET /api/portfolio/[address]`, and Overview holdings and activity are built. The transport was verified live without a key: protos load, TLS succeeds, and the gateway's HTTP 401 maps to `PROVIDER_UNAUTHORIZED`. **Not yet verified:** real balances and `ListTransactions` support on Tatum Testnet (R1), and the `GetServiceInfo.chain` label used for the network assertion. Next step: `npm run check:tatum -- 0x…` with a key. |
+| 2026-10-24 | 2 Tatum | Done (verified live) | All acceptance checks pass against real Testnet data; see §1.1 Live verification. Fixes from verification: HTTP 429 mapped to a rate-limit error, request spacer and backoff, normalisation of the URL-form endpoint, and `check:tatum` now also reads `.env`. |

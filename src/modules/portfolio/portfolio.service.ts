@@ -7,7 +7,7 @@ import { classifyAsset } from "./assets";
 import { deriveActivity } from "./activity";
 import type { Holding, PortfolioSnapshot } from "./portfolio.types";
 
-const METADATA_CONCURRENCY = 6;
+const METADATA_CONCURRENCY = 2;
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);

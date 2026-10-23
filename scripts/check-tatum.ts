@@ -13,7 +13,8 @@ import { getPortfolioSnapshot } from "@/modules/portfolio/portfolio.service";
 
 import { existsSync } from "node:fs";
 
-if (existsSync(".env.local")) process.loadEnvFile(".env.local");
+// Same precedence as Next.js: .env.local wins over .env (loadEnvFile never overwrites set vars).
+for (const file of [".env.local", ".env"]) if (existsSync(file)) process.loadEnvFile(file);
 
 async function main() {
   const provider = getSuiProvider();

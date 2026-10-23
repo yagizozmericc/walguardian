@@ -1,6 +1,6 @@
 import { status, type ServiceError, Metadata } from "@grpc/grpc-js";
 import { describe, expect, it } from "vitest";
-import { mapGrpcError } from "@/modules/blockchain/tatum.client";
+import { RequestSpacer, mapGrpcError } from "@/modules/blockchain/tatum.client";
 
 const err = (code: status, details = "x"): ServiceError =>
   Object.assign(new Error(details), { code, details, metadata: new Metadata() });
@@ -21,5 +21,20 @@ describe("mapGrpcError", () => {
     expect(mapped.retryable).toBe(retryable);
     expect(mapped.provider).toBe("tatum");
     expect(mapped.message).toContain("ListTransactions");
+  });
+
+  it("treats the gateway's HTTP 429 as a retryable rate limit, not an outage", () => {
+    const mapped = mapGrpcError(err(status.UNAVAILABLE, "Received HTTP status code 429"), "GetCoinInfo");
+    expect(mapped.code).toBe("PROVIDER_RATE_LIMITED");
+    expect(mapped.retryable).toBe(true);
+  });
+});
+
+describe("RequestSpacer", () => {
+  it("spaces request starts to the configured rate", async () => {
+    const spacer = new RequestSpacer(20); // one start per 50ms
+    const t0 = Date.now();
+    for (let i = 0; i < 4; i++) await spacer.acquire();
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(140);
   });
 });

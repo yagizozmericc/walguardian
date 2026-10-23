@@ -15,13 +15,14 @@ const EnvSchema = z.object({
   ALLOW_MAINNET: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).optional()),
   TATUM_API_KEY: optionalString,
   TATUM_SUI_GRPC_ENDPOINT: optionalString,
+  TATUM_MAX_RPS: z.preprocess(emptyToUndefined, z.coerce.number().positive().max(200).default(3)),
 });
 
 export type SuiNetwork = "testnet" | "mainnet";
 
 export interface ServerEnv {
   network: SuiNetwork;
-  tatum: { apiKey: string | undefined; grpcEndpoint: string };
+  tatum: { apiKey: string | undefined; grpcEndpoint: string; maxRequestsPerSecond: number };
 }
 
 /**
@@ -44,9 +45,10 @@ export function parseEnv(source: Record<string, string | undefined>): ServerEnv 
     );
   }
 
-  const grpcEndpoint =
+  const grpcEndpoint = normalizeGrpcEndpoint(
     e.TATUM_SUI_GRPC_ENDPOINT ??
-    (e.SUI_NETWORK === "mainnet" ? MAINNET_TATUM_GRPC : TESTNET_TATUM_GRPC);
+      (e.SUI_NETWORK === "mainnet" ? MAINNET_TATUM_GRPC : TESTNET_TATUM_GRPC),
+  );
 
   if (e.SUI_NETWORK === "testnet" && grpcEndpoint.includes("mainnet")) {
     throw new ConfigError(
@@ -56,8 +58,29 @@ export function parseEnv(source: Record<string, string | undefined>): ServerEnv 
 
   return {
     network: e.SUI_NETWORK,
-    tatum: { apiKey: e.TATUM_API_KEY, grpcEndpoint },
+    tatum: { apiKey: e.TATUM_API_KEY, grpcEndpoint, maxRequestsPerSecond: e.TATUM_MAX_RPS },
   };
+}
+
+/**
+ * grpc-js expects "host:port". Accept the URL form shown in Tatum's docs
+ * ("https://sui-testnet-grpc.gateway.tatum.io") and normalize it; TLS is
+ * always used, so plaintext schemes are rejected.
+ */
+export function normalizeGrpcEndpoint(raw: string): string {
+  let value = raw.trim();
+  const scheme = /^([a-z]+):\/\//i.exec(value);
+  if (scheme) {
+    if (scheme[1].toLowerCase() !== "https") {
+      throw new ConfigError("TATUM_SUI_GRPC_ENDPOINT must use TLS (https:// or host:443).");
+    }
+    value = value.slice(scheme[0].length);
+  }
+  value = value.replace(/\/+$/, "");
+  if (!/^[a-z0-9.-]+(:\d{1,5})?$/i.test(value)) {
+    throw new ConfigError("TATUM_SUI_GRPC_ENDPOINT must be a hostname, optionally with a port.");
+  }
+  return value.includes(":") ? value : `${value}:443`;
 }
 
 let cached: ServerEnv | undefined;

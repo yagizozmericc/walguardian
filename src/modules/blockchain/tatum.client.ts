@@ -19,7 +19,8 @@ const PROTO_FILES = ["sui/rpc/v2/ledger_service.proto", "sui/rpc/v2/state_servic
 
 const DEFAULT_DEADLINE_MS = 15_000;
 const STREAM_DEADLINE_MS = 30_000;
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 500;
 
 type UnaryFn = (
   req: unknown,
@@ -56,6 +57,10 @@ function loadServices() {
 
 export function mapGrpcError(err: grpc.ServiceError, method: string): ProviderError {
   const detail = `${method}: ${err.details || err.message}`;
+  // grpc-js surfaces the gateway's HTTP 429 as UNAVAILABLE; it is a rate limit, not an outage.
+  if (/HTTP status code 429/.test(err.details ?? "")) {
+    return new ProviderError("tatum", "PROVIDER_RATE_LIMITED", `Tatum rate limit reached (${detail}).`, true);
+  }
   switch (err.code) {
     case grpc.status.UNAUTHENTICATED:
     case grpc.status.PERMISSION_DENIED:
@@ -76,6 +81,23 @@ export function mapGrpcError(err: grpc.ServiceError, method: string): ProviderEr
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Spaces request starts to stay under the plan's requests-per-second limit
+ * (Tatum's free tier returns HTTP 429 above a few requests per second).
+ */
+export class RequestSpacer {
+  private next = 0;
+  constructor(private readonly maxPerSecond: number) {}
+
+  async acquire(): Promise<void> {
+    const interval = 1000 / this.maxPerSecond;
+    const now = Date.now();
+    const slot = Math.max(now, this.next);
+    this.next = slot + interval;
+    if (slot > now) await sleep(slot - now);
+  }
+}
+
 export interface StreamResult<T> {
   frames: T[];
 }
@@ -84,10 +106,14 @@ export class TatumGrpcClient {
   private readonly ledger: ServiceClient;
   private readonly state: ServiceClient;
 
+  private readonly spacer: RequestSpacer;
+
   constructor(
     readonly endpoint: string,
     private readonly apiKey: string,
+    maxRequestsPerSecond = 3,
   ) {
+    this.spacer = new RequestSpacer(maxRequestsPerSecond);
     const { LedgerService, StateService } = loadServices();
     const creds = grpc.credentials.createSsl();
     const options: grpc.ClientOptions = { "grpc.max_receive_message_length": 32 * 1024 * 1024 };
@@ -112,6 +138,7 @@ export class TatumGrpcClient {
     if (typeof fn !== "function") throw new Error(`Unknown gRPC method ${method}`);
 
     for (let attempt = 0; ; attempt++) {
+      await this.spacer.acquire();
       try {
         return await new Promise<T>((resolve, reject) => {
           fn.call(client, request, this.metadata(), { deadline: Date.now() + DEFAULT_DEADLINE_MS }, (err, res) =>
@@ -122,7 +149,7 @@ export class TatumGrpcClient {
         const mapped = mapGrpcError(raw as grpc.ServiceError, method);
         if (!mapped.retryable || attempt >= MAX_RETRIES) throw mapped;
         logger.warn("tatum.retry", { method, attempt, code: mapped.code });
-        await sleep(300 * 3 ** attempt);
+        await sleep(RETRY_BASE_MS * 2 ** attempt);
       }
     }
   }
@@ -135,6 +162,7 @@ export class TatumGrpcClient {
 
     for (let attempt = 0; ; attempt++) {
       const frames: T[] = [];
+      await this.spacer.acquire();
       try {
         await new Promise<void>((resolve, reject) => {
           const call = fn.call(client, request, this.metadata(), { deadline: Date.now() + STREAM_DEADLINE_MS });
@@ -147,7 +175,7 @@ export class TatumGrpcClient {
         const mapped = mapGrpcError(raw as grpc.ServiceError, method);
         if (!mapped.retryable || frames.length > 0 || attempt >= MAX_RETRIES) throw mapped;
         logger.warn("tatum.retry", { method, attempt, code: mapped.code });
-        await sleep(300 * 3 ** attempt);
+        await sleep(RETRY_BASE_MS * 2 ** attempt);
       }
     }
   }

@@ -174,6 +174,6 @@ export function getSuiProvider(): SuiTatumProvider {
   if (!e.tatum.apiKey) {
     throw new ConfigError("Tatum is not configured. Set TATUM_API_KEY (a Sui Testnet key) in .env.local.", "CONFIG_MISSING");
   }
-  provider = new SuiTatumProvider(new TatumGrpcClient(e.tatum.grpcEndpoint, e.tatum.apiKey), e.network);
+  provider = new SuiTatumProvider(new TatumGrpcClient(e.tatum.grpcEndpoint, e.tatum.apiKey, e.tatum.maxRequestsPerSecond), e.network);
   return provider;
 }
