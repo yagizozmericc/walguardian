@@ -507,7 +507,7 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 **Limits:**
 - Gas is a historical estimate. Real costs depend on the transaction that is eventually built.
 - The recipient lookup sees only the node's available history (checkpoint 314,252,673 onward).
-- Stablecoin reserves apply to the single asset being sent.
+- ~~Stablecoin reserves apply to the single asset being sent.~~ Fixed in Phase 9: the reserve applies across the stablecoin class.
 - Memory remains the development mock until Walrus Testnet is available.
 
 ### Landing page (done)
@@ -534,12 +534,35 @@ A public marketing page at `/`. It sits outside the dashboard shell and loads no
 - Checked in headless Chrome at 1440 px and at 390 px with mobile emulation. There is no horizontal overflow, and the mobile menu and Copilot tabs work.
 - Lighthouse, mobile: Performance 94, Accessibility 100, Best Practices 100, SEO 100. Desktop: 100 in all four.
 
-### Phase 9: Demo and hardening
-- Seed script, README, end-to-end demo script, and a UI polish pass at desktop and mobile widths.
+### Phase 9: Demo readiness and hardening (done)
+
+**P0: financial correctness and security**
+- *Stablecoin reserve across the class.* The minimum stablecoin reserve is now applied to the whole stablecoin class: the value of other held stablecoins (at reference prices) is deducted first, and only the uncovered part is reserved from the coin being sent. It is conservative: if another stablecoin is unpriced, the full reserve is kept; if the coin being sent has no price, nothing is deducted and a note says so. Non-stablecoins are never reduced.
+- *Security headers* in `next.config.ts`: CSP (`default-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'`), nosniff, `X-Frame-Options`, Referrer-Policy, Permissions-Policy, COOP, HSTS in production. `X-Powered-By` is removed.
+- *Request guard* (`src/lib/request-guard.ts`): JSON-only, size-capped bodies, and a per-client rate limit (`API_RATE_PER_MINUTE`/`_PER_DAY`) on every Tatum- or Gemini-backed route, returning `RATE_LIMITED` (429).
+
+**P1: demo readiness**
+- *Demo wallet:* `DEMO_WALLET_ADDRESS` (default `0x059e…d94f`), labelled everywhere as a third-party, read-only wallet. It is reachable via **Use demo wallet** and from the landing page.
+- *Synthetic demo data* (`src/modules/demo/`, `/api/demo/synthetic`), available only with `MEMORY_PROVIDER=mock`. It loads two goals, a strategy and a liquidity note, each tagged `[Synthetic demo]`. Loading is idempotent and never overwrites a strategy the user saved. Reset removes only synthetic records.
+- *Overview command center:* Security, Savings, Strategy and Financial memory cards, each with loading, empty and error states, plus quick actions.
+- *Landing page:* a demo-wallet link and accurate Walrus wording.
+
+**P2: UX and documentation**
+- Mobile layout: the single-column page grids now use `minmax(0,1fr)` and Panels use `min-w-0`, so wide tables scroll inside their containers instead of being clipped at 390 px.
+- `docs/DEMO.md` (scripted walkthrough), `docs/DEPLOYMENT.md` (targets, environment, security, blockers), and `docs/issues/walrus-staging-tls.md` (an issue draft, **not filed**).
+
+**Verification (2026-10-25):**
+- Typecheck, lint, 237 unit tests and a production build pass.
+- Headless Chrome checks at 1024 px and 390 px on every app page find no overflow and no console or CSP errors. A browser run of the synthetic load and its idempotency passed. Security headers were confirmed with curl.
+- Walrus Testnet re-checked read-only: both staging hosts still serve `CN=*.up.railway.app`. No Walrus writes were made.
+
+**Limits:** memory still runs on the development mock. Rate limits and caches are in-process, which assumes a single instance (see `docs/DEPLOYMENT.md`).
 
 ---
 
 ## 5. Environment variables
+
+> The current, complete list with defaults is in `docs/DEPLOYMENT.md` and `.env.example`. This table records when each variable was introduced; some early entries (e.g. the original LLM provider) were superseded.
 
 | Variable | Phase | Notes |
 |---|---|---|
@@ -562,7 +585,7 @@ A public marketing page at `/`. It sits outside the dashboard shell and loads no
 
 | ID | Risk | Likelihood | Mitigation |
 |---|---|---|---|
-| **B1** | Walrus Memory Testnet relayer and dashboard have a broken TLS certificate (still broken on 2026-10-24). | **Resolved by decision** | The owner authorized the **Walrus Memory Mainnet hosted relayer** for development and demos, with non-sensitive synthetic data only. Tatum stays on Testnet. Setup steps, required transactions, and env vars are in `docs/WALRUS_INTEGRATION.md`. |
+| **B1** | Walrus Memory Testnet relayer and dashboard have a broken TLS certificate (still broken on 2026-10-25). | **Open: awaiting owner confirmation.** The current instruction is mock-only with no Walrus writes; the earlier decision below is not yet in effect. | The owner authorized the **Walrus Memory Mainnet hosted relayer** for development and demos, with non-sensitive synthetic data only. Tatum stays on Testnet. Setup steps, required transactions, and env vars are in `docs/WALRUS_INTEGRATION.md`. |
 | R1 | ~~Tatum's Testnet gRPC node may not serve the indexed `ListTransactions` API.~~ | **Resolved** | Verified working on 2026-10-24. |
 | R7 | The Tatum free-tier rate limit (HTTP 429 at a few requests per second) constrains history depth and refresh frequency. | Certain | Request spacer, backoff, bounded history (≤ 200 transactions for profiling), and short server-side caching. |
 | R8 | The node prunes history below checkpoint 314,252,673, so baselines only cover recent history. | Certain | Show the analysed window and lower confidence when it is short. |
@@ -616,3 +639,4 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | 7 Copilot | Done | The Gemini provider (verified live), grounded context, citation and figure validation, deterministic fallback, rate limiting, copilot panel, and "Remember this" notes are complete, with 188 tests passing. Memory changing the AI's answer was verified live. |
 | 2026-10-24 | 8 Transfer check | Done | The simulation-only four-pillar assessment, pre-execution Protect adapter, gas and conservative Max, recipient lookup, decision recall, and grounded explanation are complete, with 223 tests passing. Live and browser runs were verified. |
 | 2026-10-24 | Landing page | Done | Public landing page at `/`; the Overview moved to `/dashboard`, with a redirect for `/?address=` links. Typecheck, lint, tests and build pass. Verified in a browser at desktop and mobile sizes; Lighthouse results are in the Landing page section. |
+| 2026-10-25 | 9 Demo and hardening | Done | Class-wide stablecoin reserve, security headers, request guard and rate limits, demo wallet, synthetic demo data (mock only), Overview command center, mobile layout fix, and the demo and deployment docs, with 237 tests passing. Walrus Testnet is still blocked on TLS, and an issue draft is prepared but not filed. The Walrus network decision is awaiting owner confirmation. |

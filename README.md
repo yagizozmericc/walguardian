@@ -10,6 +10,9 @@ Development is **Testnet-first**. Mainnet is refused unless `ALLOW_MAINNET=true`
 
 See `docs/IMPLEMENTATION_PLAN.md` for phase status, verified integration findings, risks, and open questions.
 
+- **Demo:** `docs/DEMO.md` is a scripted walkthrough using a third-party, read-only Testnet wallet and clearly labelled synthetic demo data.
+- **Deployment:** `docs/DEPLOYMENT.md` covers supported targets (local or a single Node server), environment variables, the security posture and current blockers.
+
 ## Setup
 
 ```bash
@@ -27,6 +30,8 @@ npm run dev                  # http://localhost:3000
 | `/dashboard` | Overview: the app's entry point. `/?address=0x…` links redirect here. |
 | `/security`, `/savings`, `/strategy`, `/assess`, `/memory` | App modules |
 | `/api/*` | Server routes used by the app |
+
+The address bar offers **Use demo wallet** (`DEMO_WALLET_ADDRESS`, a third-party public Testnet address; read-only). With `MEMORY_PROVIDER=mock`, the Overview and Memory pages can **Load synthetic demo data** (idempotent, labelled) and reset it without touching your own records.
 
 On Vercel, Open Graph, canonical and sitemap URLs use the deployment's own URL automatically. Set `SITE_URL` to use a custom domain instead.
 
