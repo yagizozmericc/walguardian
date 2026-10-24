@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowRight } from "lucide-react";
 import { Container } from "./primitives";
 import { APP_HREF } from "./nav-links";
+import { demoWalletAddress } from "@/lib/demo";
 import { AppPreview } from "./previews/app-preview";
 
 export function Hero() {
@@ -56,6 +57,12 @@ export function Hero() {
               <ArrowDown className="size-4 text-muted-foreground transition-transform group-hover:translate-y-0.5" />
             </a>
           </div>
+          <p className="mk-enter mt-4 text-[13px] text-muted-foreground" style={{ "--mk-delay": "360ms" } as React.CSSProperties}>
+            <Link href={`${APP_HREF}?address=${demoWalletAddress()}`} className="underline decoration-border underline-offset-4 hover:text-foreground">
+              Try it with a read-only demo wallet
+            </Link>{" "}
+            <span className="text-subtle">· a public Sui Testnet address owned by a third party</span>
+          </p>
         </div>
 
         <div className="mk-enter relative mx-auto mt-16 max-w-[1080px] sm:mt-20" style={{ "--mk-delay": "420ms" } as React.CSSProperties}>

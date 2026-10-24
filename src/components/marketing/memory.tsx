@@ -132,7 +132,7 @@ export function Memory() {
           </div>
 
           <div className="mk-reveal">
-            <h3 className="text-[18px] font-semibold tracking-tight">Powered by Walrus Memory</h3>
+            <h3 className="text-[18px] font-semibold tracking-tight">Built for Walrus Memory</h3>
             <p className="mt-3 text-[14px] leading-relaxed text-muted-foreground">
               Walrus Memory is the intended persistence layer: decentralized storage for the context your copilot relies on. Here is where it stands today.
             </p>
