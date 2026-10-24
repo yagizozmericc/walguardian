@@ -510,6 +510,29 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 - Stablecoin reserves apply to the single asset being sent.
 - Memory remains the development mock until Walrus Testnet is available.
 
+### Landing page (done)
+A public marketing page at `/`. It sits outside the dashboard shell and loads none of its providers.
+
+**Routing:**
+- `/` is the landing page, in the `src/app/(marketing)` route group with its own layout.
+- `/dashboard` is the Overview, moved from `(dashboard)/page.tsx`. All other app routes (`/security`, `/savings`, `/strategy`, `/assess`, `/memory`) and every `/api/*` route are unchanged.
+- `/?address=0x…` redirects to `/dashboard?address=0x…` (`next.config.ts`), so shared watch links keep working.
+
+**Implementation:**
+- Components are in `src/components/marketing/`, one per section. Static product previews are in `previews/`; they reuse the app's tokens and copy (verdict titles, finding categories, basis labels, disclaimer) so they match the product.
+- All preview figures come from one synthetic scenario (`scenario.ts`) and every preview frame is labelled *Illustrative*.
+- Server-rendered and prerendered as static. The only client components are the mobile menu and the Copilot question switcher.
+- Scroll reveals use CSS scroll-driven animations (no JavaScript; content stays visible where they are unsupported). All motion is disabled under `prefers-reduced-motion`.
+- The theme is scoped to `.marketing` in `(marketing)/marketing.css`, so the dashboard palette is unchanged.
+- SEO: page metadata, canonical URL, Open Graph and Twitter tags, a generated `opengraph-image`, `robots.txt`, `sitemap.xml`, and an SVG icon. Absolute URLs use `SITE_URL`.
+
+**Claims policy.** Walrus Memory is described as the intended persistence layer, integrated through the official SDK. The demo runs on the labelled development mock, and live persistence is shown as not yet verified. Transfer check is described as simulation-only. The technology section states that no partnership or endorsement is implied.
+
+**Verification (2026-10-24):**
+- Typecheck, lint, unit tests and a production build pass.
+- Checked in headless Chrome at 1440 px and at 390 px with mobile emulation. There is no horizontal overflow, and the mobile menu and Copilot tabs work.
+- Lighthouse, mobile: Performance 94, Accessibility 100, Best Practices 100, SEO 100. Desktop: 100 in all four.
+
 ### Phase 9: Demo and hardening
 - Seed script, README, end-to-end demo script, and a UI polish pass at desktop and mobile widths.
 
@@ -519,6 +542,7 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 
 | Variable | Phase | Notes |
 |---|---|---|
+| `SITE_URL` | Landing | Public origin for Open Graph, canonical and sitemap URLs. Default `http://localhost:3000`. |
 | `SUI_NETWORK` | 1 | `testnet` (default). `mainnet` is rejected unless `ALLOW_MAINNET=true`. |
 | `ALLOW_MAINNET` | 1 | Leave unset. Requires the project owner's explicit approval. |
 | `TATUM_API_KEY` | 2 | Tatum **Testnet** key. Server-only. |
@@ -590,3 +614,4 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | 6 Memory | Done on mock | The memory layer, sessions, isolation, persistence for goals, strategy, reviews, and decisions, memory-driven Protect personalization, and the Financial Memory page are complete, with 166 tests passing. End-to-end verified with the mock provider plus live Tatum data. A live Walrus connection is still pending (see the Phase 6 section). |
 | 2026-10-24 | 7 Copilot | Done | The Gemini provider (verified live), grounded context, citation and figure validation, deterministic fallback, rate limiting, copilot panel, and "Remember this" notes are complete, with 188 tests passing. Memory changing the AI's answer was verified live. |
 | 2026-10-24 | 8 Transfer check | Done | The simulation-only four-pillar assessment, pre-execution Protect adapter, gas and conservative Max, recipient lookup, decision recall, and grounded explanation are complete, with 223 tests passing. Live and browser runs were verified. |
+| 2026-10-24 | Landing page | Done | Public landing page at `/`; the Overview moved to `/dashboard`, with a redirect for `/?address=` links. Typecheck, lint, tests and build pass. Verified in a browser at desktop and mobile sizes; Lighthouse results are in the Landing page section. |

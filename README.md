@@ -19,6 +19,17 @@ cp .env.example .env.local   # then set TATUM_API_KEY to your Tatum Sui *Testnet
 npm run dev                  # http://localhost:3000
 ```
 
+## Routes
+
+| Route | What it is |
+|---|---|
+| `/` | Public landing page (static). Product previews use illustrative data. |
+| `/dashboard` | Overview: the app's entry point. `/?address=0x…` links redirect here. |
+| `/security`, `/savings`, `/strategy`, `/assess`, `/memory` | App modules |
+| `/api/*` | Server routes used by the app |
+
+Set `SITE_URL` in production so Open Graph, canonical and sitemap URLs are absolute.
+
 ## Scripts
 
 | Command | Purpose |
