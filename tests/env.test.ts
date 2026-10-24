@@ -69,4 +69,15 @@ describe("parseEnv", () => {
       expect(() => parseEnv({ MEMORY_PROVIDER: "walrus", SESSION_SECRET: secret })).toThrow(/requires/);
     });
   });
+
+  describe("llm configuration", () => {
+    it("is disabled without a key and defaults to a free-tier Flash-Lite model", () => {
+      expect(parseEnv({}).llm.provider).toBe("disabled");
+      expect(parseEnv({ GEMINI_API_KEY: "k" }).llm).toMatchObject({ provider: "gemini", model: "gemini-3.5-flash-lite", maxOutputTokens: 1200, ratePerMinute: 6 });
+    });
+    it("validates the configurable model id", () => {
+      expect(parseEnv({ GEMINI_API_KEY: "k", LLM_MODEL: "gemini-3.8-flash" }).llm).toMatchObject({ model: "gemini-3.8-flash" });
+      expect(() => parseEnv({ GEMINI_API_KEY: "k", LLM_MODEL: "../../etc" })).toThrow(ConfigError);
+    });
+  });
 });

@@ -25,7 +25,16 @@ const EnvSchema = z.object({
   SESSION_SECRET: optionalString,
   MOCK_MEMORY_FILE: z.preprocess(emptyToUndefined, z.string().default(".data/mock-memory.json")),
   MOCK_MEMORY_TTL_DAYS: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().max(3650).default(28)),
+  GEMINI_API_KEY: optionalString,
+  LLM_MODEL: z.preprocess(emptyToUndefined, z.string().regex(/^[a-z0-9][a-z0-9.-]{2,63}$/, "a Gemini model id such as gemini-3.5-flash-lite").default("gemini-3.5-flash-lite")),
+  LLM_MAX_OUTPUT_TOKENS: z.preprocess(emptyToUndefined, z.coerce.number().int().min(128).max(8192).default(1200)),
+  COPILOT_RATE_PER_MINUTE: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(120).default(6)),
+  COPILOT_RATE_PER_DAY: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(5000).default(100)),
 });
+
+export type LlmConfig =
+  | { provider: "disabled"; reason: string }
+  | { provider: "gemini"; apiKey: string; model: string; maxOutputTokens: number; ratePerMinute: number; ratePerDay: number };
 
 /** Hosted relayers listed in the Walrus Memory docs. */
 export const WALRUS_TESTNET_RELAYER = "https://relayer-staging.memory.walrus.xyz";
@@ -56,6 +65,7 @@ export interface ServerEnv {
   network: SuiNetwork;
   tatum: { apiKey: string | undefined; grpcEndpoint: string; maxRequestsPerSecond: number };
   memory: MemoryConfig;
+  llm: LlmConfig;
 }
 
 /**
@@ -93,6 +103,16 @@ export function parseEnv(source: Record<string, string | undefined>): ServerEnv 
     network: e.SUI_NETWORK,
     tatum: { apiKey: e.TATUM_API_KEY, grpcEndpoint, maxRequestsPerSecond: e.TATUM_MAX_RPS },
     memory: parseMemoryConfig(e),
+    llm: e.GEMINI_API_KEY
+      ? {
+          provider: "gemini",
+          apiKey: e.GEMINI_API_KEY,
+          model: e.LLM_MODEL,
+          maxOutputTokens: e.LLM_MAX_OUTPUT_TOKENS,
+          ratePerMinute: e.COPILOT_RATE_PER_MINUTE,
+          ratePerDay: e.COPILOT_RATE_PER_DAY,
+        }
+      : { provider: "disabled", reason: "GEMINI_API_KEY is not set." },
   };
 }
 
