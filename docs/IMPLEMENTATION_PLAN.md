@@ -1,7 +1,7 @@
 # Guardian AI — Implementation Plan
 
 **Last updated:** 2026-10-24
-**Status:** Phases 1–7 are complete. Memory runs on the labelled development mock until the Walrus Testnet relayer is available. The copilot uses Gemini free tier (`gemini-3.5-flash-lite`). Phase 8 has not been started. See [Progress log](#9-progress-log).
+**Status:** Phases 1–8 are complete. Memory runs on the labelled development mock until the Walrus Testnet relayer is available. The copilot and explanations use Gemini free tier (`gemini-3.5-flash-lite`). Phase 9 (demo and hardening) has not been started. See [Progress log](#9-progress-log).
 **Network policy:** Testnet first. No Mainnet credentials, reads, or writes without explicit approval from the project owner.
 
 This plan follows `docs/PRD.md` and `docs/ARCHITECTURE.md`. It records what was verified against official documentation on 2026-10-24, and it changes the architecture where the docs required it.
@@ -436,10 +436,79 @@ The order follows the project owner's brief. Each phase ends with type-check, li
 - The conversation is kept only in the browser tab. Memory is saved only when the user chooses "Remember this".
 - Without memory configured, the copilot works with on-chain data and engine results only, and says so.
 
-### Phase 8: Unified transaction assessment
-**Depends on:** Phases 3–7.
-- `POST /api/assessments/transfer`: Protect, Save, Invest, and Memory findings, an overall recommendation, and the IDs of the memories used.
-- The demo flow shows the before and after of a memory change.
+### Phase 8: Pre-transaction intelligence (done)
+**Simulation only.** Nothing is built, signed, dry-run or broadcast. A static test checks that the assessment module contains no signing or execution calls.
+
+**Approved design, with the owner's adjustments:**
+- **Input.** A recipient address, an asset (held, or verified SUI/USDC), and an exact amount. Validated with Zod and the asset's on-chain decimals. Unknown assets and assets without published decimals are rejected with clear errors.
+- **Gas.**
+  - The estimate is the **median net gas fee of the wallet's past successful transactions**. It is always labelled as an estimate, never a quote.
+  - SUI gas is checked for **every** transfer, including USDC and other tokens.
+  - "Insufficient balance for this simulation" and "Insufficient estimated SUI gas for this simulation" are separate verdicts.
+- **Conservative Max.** The estimated available amount is the balance minus savings earmarks, minus the configured SUI gas reserve, minus a gas buffer of 2× the median estimate, minus the minimum stablecoin reserve converted at the reference price (or a note when it cannot be converted). The UI shows the total balance next to the estimated available amount, with an itemised breakdown.
+- **Protect (pre-execution adapter).**
+  - Only rules that apply before execution are used: unusual amount, new recipient, frequency (including the hypothetical send), large outflow, and new asset.
+  - First-time package use is listed as not applicable.
+  - **User feedback is never passed into the onchain evidence.** A recipient you flagged produces a separate strong warning ("your own earlier assessment, not confirmed evidence of fraud"). A trusted recipient produces an informational note, and the onchain signals stay unchanged.
+  - Critical onchain findings, both in the simulation and still open on the wallet, are preserved.
+- **Recipient lookup.** One read-only Tatum query for recent activity:
+  - cached for 5 minutes (failures for about 30 seconds), with a 6-second timeout, through the shared rate spacer
+  - it never throws: "unavailable" or "no activity" become unknowns
+  - "no activity" is never presented as evidence of safety
+- **Save.** Before and after balances; unallocated funds; earmarked funds used; each goal's backed amount and progress before and after; reserves falling below their minimum. All of this reuses the savings engine. When the amount exceeds the balance, these figures are marked "not calculated".
+- **Invest.** The transfer value at your reference price (or unknown), allocation before and after through the allocation engine, new drift-band breaches, and new stablecoin or gas reserve breaches. Without prices or preferences, it reports "unavailable" and shows no percentages.
+- **Memory.** Your past reviews of the recipient, earlier checks of the recipient with your decisions, investment decisions, and relevant notes.
+  - Recording "I would / would not proceed" saves a `reasoning` memory (`transfer-check:*`).
+  - It is recalled in later checks: "On … you said you would not proceed …".
+- **Combined result.** Every finding is categorised as one of:
+  - **confirmed fact**
+  - **historical pattern**
+  - **your preference or decision**
+  - **unknown**
+
+  The verdict follows a fixed precedence: insufficient balance, then insufficient gas, then review carefully, then proceed with caution, then **"No issues found in the available data"** (with "this does not mean the transfer or recipient is safe"). A disclaimer is always shown.
+- **AI explanation.** `POST /api/assessments/transfer/explain` **recomputes** the assessment on the server and builds a context from its findings only, with memory fenced as untrusted. It runs through the shared grounded Gemini step (citation and figure validation, rate limit, deterministic fallback) with extra simulation rules. The AI never changes the verdict.
+- **APIs.** `POST /api/assessments/{transfer, spendable, transfer/explain, transfer/decision}`.
+- **UI.** A "Transfer check" page with:
+  - a simulation-only notice
+  - the form, with the total and estimated available amounts and the Max breakdown
+  - the verdict band
+  - findings grouped by the four categories
+  - Protect, Save, Invest, and Memory panels
+  - "Explain with AI"
+  - "Your decision"
+
+**Verification (2026-10-24):**
+- 223 unit tests. Phase 8 added 35, covering:
+  - the gas median
+  - a normal transfer ("no issues found", never "safe")
+  - insufficient balance
+  - **a USDC transfer that still needs SUI gas**, and sending all SUI
+  - unknown gas
+  - **the conservative Max**: earmarks, gas reserve and buffer, stablecoin reserve with and without a price, never negative
+  - **pre-execution-only Protect signals**, flagged and trusted recipients kept separate from evidence, and preserved criticals
+  - open wallet criticals and thin history
+  - **recipient lookup**: active, no activity, error, timeout, cache, and retry
+  - earmark and reserve impact, Invest before/after and band breach, missing prices
+  - memory recall and memory-not-consulted
+  - self-transfers and system addresses
+  - a wording guard (no "safe", "guarantee" or "blocked")
+  - a static simulation-only check
+  - explanation context and fallback
+- Live on Testnet, with mock memory and Gemini:
+  - 1 SUI to a previously paid recipient: no signals, gas covered (median of 200 transactions).
+  - 500 SUI to a fresh recipient: critical amount signal, "Review carefully", and "no recipient activity" reported as an unknown.
+  - USDC not held: "Insufficient balance for this simulation".
+  - An invalid recipient was rejected with a 400.
+  - The decision was recorded and recalled in the next check.
+  - The Gemini explanation was fully cited with no grounding warnings.
+- A browser end-to-end run covered Max filling the conservative amount, the verdict, the AI explanation, and decision recall, with no page or server errors.
+
+**Limits:**
+- Gas is a historical estimate. Real costs depend on the transaction that is eventually built.
+- The recipient lookup sees only the node's available history (checkpoint 314,252,673 onward).
+- Stablecoin reserves apply to the single asset being sent.
+- Memory remains the development mock until Walrus Testnet is available.
 
 ### Phase 9: Demo and hardening
 - Seed script, README, end-to-end demo script, and a UI polish pass at desktop and mobile widths.
@@ -520,3 +589,4 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | 6 Walrus prep | Prepared | Read-only research covered the SDK, account setup, authentication, write/read flow, and retention. No Mainnet writes were made. See `docs/WALRUS_INTEGRATION.md`. |
 | 2026-10-24 | 6 Memory | Done on mock | The memory layer, sessions, isolation, persistence for goals, strategy, reviews, and decisions, memory-driven Protect personalization, and the Financial Memory page are complete, with 166 tests passing. End-to-end verified with the mock provider plus live Tatum data. A live Walrus connection is still pending (see the Phase 6 section). |
 | 2026-10-24 | 7 Copilot | Done | The Gemini provider (verified live), grounded context, citation and figure validation, deterministic fallback, rate limiting, copilot panel, and "Remember this" notes are complete, with 188 tests passing. Memory changing the AI's answer was verified live. |
+| 2026-10-24 | 8 Transfer check | Done | The simulation-only four-pillar assessment, pre-execution Protect adapter, gas and conservative Max, recipient lookup, decision recall, and grounded explanation are complete, with 223 tests passing. Live and browser runs were verified. |

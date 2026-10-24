@@ -579,6 +579,15 @@ For MVP, this is a planning and assessment feature.
 
 It does not automatically execute transactions or block transactions initiated in external wallets.
 
+### Implemented model (2026-10-24)
+
+- **Modules.** `modules/assessment/` contains `transfer.engine.ts` (pure), `transfer.service.ts` (data gathering), `recipient.ts` (a cached, time-boxed read-only lookup), and `explain.ts` (the AI context).
+- **Protect before execution.** Protect uses an allow-list of rules that apply before execution. User feedback is reported as a separate memory finding and never enters the onchain score.
+- **Gas.** The gas figure is the wallet's historical median net fee, labelled as an estimate. SUI gas is checked for every asset.
+- **Max.** The conservative "Max" deducts earmarks, the configured reserves, and a 2× gas buffer.
+- **Findings and verdict.** Each finding is categorised as a fact, historical pattern, preference/decision, or unknown. The verdict follows a fixed precedence, and its wording never claims safety or success.
+- **Explanation.** The explanation recomputes the assessment on the server and reuses the grounded LLM step. It cannot alter the verdict.
+
 ## 13. Application Database
 
 Use PostgreSQL for operational application state when needed.

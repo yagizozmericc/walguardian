@@ -45,4 +45,9 @@ npm run dev                  # http://localhost:3000
   - `mock` is a clearly labelled **development mock** (the SDK's `MemWalMock` plus a local file). It is not Walrus.
   - `walrus` uses the official SDK. A live connection is pending: the Walrus Testnet relayer currently fails TLS. See `docs/WALRUS_INTEGRATION.md`.
 - **Copilot** answers questions using Google Gemini (free tier, `LLM_MODEL`, default `gemini-3.5-flash-lite`). It sees only cited context: Tatum facts, deterministic engine results, your settings and memories. Every claim is checked for a valid citation, and figures not found in the data are flagged. Without `GEMINI_API_KEY`, it returns deterministic summaries.
+- **Transfer check** simulates a hypothetical transfer (it never signs or sends) across Protect, Save, Invest and Memory:
+  - Gas is a historical estimate, and SUI gas is checked for every asset.
+  - "Max" is a conservative estimated available amount.
+  - Findings are labelled as facts, patterns, your preferences, or unknowns.
+  - The AI explains the result; the verdict comes from deterministic rules and never claims a transfer is safe.
 - **Protect** scores each sent transaction against the wallet's own earlier history using deterministic rules (`src/modules/security/rules.config.ts`). Anomalies are deviations, not proof of malicious activity. Analysis is historical with manual refresh. Guardian does not monitor in real time and cannot block transactions.

@@ -41,7 +41,7 @@ function Citation({ c }: { c: CopilotPoint["citations"][number] }) {
   );
 }
 
-function Answer({ r }: { r: CopilotResponse }) {
+export function Answer({ r }: { r: CopilotResponse }) {
   const gaps = r.sections.filter((s) => s.status === "unavailable");
   return (
     <div className="space-y-3">
