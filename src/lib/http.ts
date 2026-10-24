@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_rethrow } from "next/navigation";
 import { toApiError } from "./errors";
 import { logger } from "./logger";
 
@@ -22,6 +23,8 @@ export async function handle<T>(
     logger.info("request.ok", { route, requestId, ms: Math.round(performance.now() - started) });
     return Response.json(data, { headers: { "x-request-id": requestId } });
   } catch (err) {
+    // Let Next.js control-flow errors (e.g. prerender bail-outs) propagate untouched.
+    unstable_rethrow(err);
     const { status, body } = toApiError(err, requestId);
     const log = status >= 500 ? logger.error : logger.warn;
     log("request.failed", {

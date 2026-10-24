@@ -47,4 +47,26 @@ describe("parseEnv", () => {
   it("rejects unknown networks", () => {
     expect(() => parseEnv({ SUI_NETWORK: "devnet" })).toThrow(ConfigError);
   });
+
+  describe("memory configuration", () => {
+    const secret = "ab".repeat(32);
+    it("is disabled unless a provider is chosen explicitly", () => {
+      expect(parseEnv({}).memory.provider).toBe("disabled");
+    });
+    it("requires a strong session secret when enabled", () => {
+      expect(() => parseEnv({ MEMORY_PROVIDER: "mock" })).toThrow(ConfigError);
+      expect(() => parseEnv({ MEMORY_PROVIDER: "mock", SESSION_SECRET: "short" })).toThrow(ConfigError);
+      expect(parseEnv({ MEMORY_PROVIDER: "mock", SESSION_SECRET: secret }).memory).toMatchObject({ provider: "mock", ttlDays: 28, namespacePrefix: "guardian-demo" });
+    });
+    it("accepts the Testnet relayer and refuses Mainnet without explicit approval", () => {
+      const walrus = { MEMORY_PROVIDER: "walrus", SESSION_SECRET: secret, MEMWAL_PRIVATE_KEY: "k", MEMWAL_ACCOUNT_ID: "0x1" };
+      expect(parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://relayer-staging.memory.walrus.xyz/" }).memory).toMatchObject({ provider: "walrus", network: "testnet" });
+      expect(() => parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://relayer.memory.walrus.xyz" })).toThrow(/ALLOW_WALRUS_MAINNET/);
+      expect(() => parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://example.com" })).toThrow(ConfigError);
+      expect(parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://relayer.memory.walrus.xyz", ALLOW_WALRUS_MAINNET: "true" }).memory).toMatchObject({ network: "mainnet" });
+    });
+    it("requires credentials for walrus", () => {
+      expect(() => parseEnv({ MEMORY_PROVIDER: "walrus", SESSION_SECRET: secret })).toThrow(/requires/);
+    });
+  });
 });

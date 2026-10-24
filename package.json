@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "check:tatum": "tsx --conditions=react-server scripts/check-tatum.ts",
     "check:protect": "tsx --conditions=react-server scripts/check-protect.ts",
-    "demo:protect": "tsx --conditions=react-server scripts/demo-protect.ts"
+    "demo:protect": "tsx --conditions=react-server scripts/demo-protect.ts",
+    "check:walrus": "tsx --conditions=react-server scripts/check-walrus.ts"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.6",

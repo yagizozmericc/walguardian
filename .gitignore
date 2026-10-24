@@ -42,3 +42,6 @@ next-env.d.ts
 
 # keep the committed template (contains no values)
 !.env.example
+
+# development mock memory store (not Walrus)
+/.data/

@@ -16,13 +16,46 @@ const EnvSchema = z.object({
   TATUM_API_KEY: optionalString,
   TATUM_SUI_GRPC_ENDPOINT: optionalString,
   TATUM_MAX_RPS: z.preprocess(emptyToUndefined, z.coerce.number().positive().max(200).default(3)),
+  MEMORY_PROVIDER: z.preprocess(emptyToUndefined, z.enum(["walrus", "mock"]).optional()),
+  MEMWAL_PRIVATE_KEY: optionalString,
+  MEMWAL_ACCOUNT_ID: optionalString,
+  MEMWAL_SERVER_URL: optionalString,
+  MEMWAL_NAMESPACE_PREFIX: z.preprocess(emptyToUndefined, z.string().regex(/^[a-z0-9-]{1,32}$/, "lowercase letters, digits and dashes").default("guardian-demo")),
+  ALLOW_WALRUS_MAINNET: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).optional()),
+  SESSION_SECRET: optionalString,
+  MOCK_MEMORY_FILE: z.preprocess(emptyToUndefined, z.string().default(".data/mock-memory.json")),
+  MOCK_MEMORY_TTL_DAYS: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().max(3650).default(28)),
 });
+
+/** Hosted relayers listed in the Walrus Memory docs. */
+export const WALRUS_TESTNET_RELAYER = "https://relayer-staging.memory.walrus.xyz";
+export const WALRUS_MAINNET_RELAYER = "https://relayer.memory.walrus.xyz";
+
+export type MemoryConfig =
+  | { provider: "disabled"; reason: string }
+  | {
+      provider: "mock";
+      namespacePrefix: string;
+      sessionSecret: string;
+      file: string;
+      ttlDays: number;
+    }
+  | {
+      provider: "walrus";
+      namespacePrefix: string;
+      sessionSecret: string;
+      key: string;
+      accountId: string;
+      serverUrl: string;
+      network: "testnet" | "mainnet" | "unknown";
+    };
 
 export type SuiNetwork = "testnet" | "mainnet";
 
 export interface ServerEnv {
   network: SuiNetwork;
   tatum: { apiKey: string | undefined; grpcEndpoint: string; maxRequestsPerSecond: number };
+  memory: MemoryConfig;
 }
 
 /**
@@ -59,6 +92,50 @@ export function parseEnv(source: Record<string, string | undefined>): ServerEnv 
   return {
     network: e.SUI_NETWORK,
     tatum: { apiKey: e.TATUM_API_KEY, grpcEndpoint, maxRequestsPerSecond: e.TATUM_MAX_RPS },
+    memory: parseMemoryConfig(e),
+  };
+}
+
+/**
+ * Memory is opt-in and explicit: there is no implicit fallback between
+ * providers. The Walrus Mainnet relayer is refused unless ALLOW_WALRUS_MAINNET
+ * is set (a separate switch from ALLOW_MAINNET, which governs Tatum).
+ */
+function parseMemoryConfig(e: z.infer<typeof EnvSchema>): MemoryConfig {
+  if (!e.MEMORY_PROVIDER) {
+    return { provider: "disabled", reason: "MEMORY_PROVIDER is not set. Set it to \"walrus\" or \"mock\"." };
+  }
+  if (!e.SESSION_SECRET || !/^[0-9a-fA-F]{64,}$/.test(e.SESSION_SECRET)) {
+    throw new ConfigError("SESSION_SECRET must be at least 32 random bytes in hex when memory is enabled.");
+  }
+  if (e.MEMORY_PROVIDER === "mock") {
+    return {
+      provider: "mock",
+      namespacePrefix: e.MEMWAL_NAMESPACE_PREFIX,
+      sessionSecret: e.SESSION_SECRET,
+      file: e.MOCK_MEMORY_FILE,
+      ttlDays: e.MOCK_MEMORY_TTL_DAYS,
+    };
+  }
+  if (!e.MEMWAL_PRIVATE_KEY || !e.MEMWAL_ACCOUNT_ID || !e.MEMWAL_SERVER_URL) {
+    throw new ConfigError("MEMORY_PROVIDER=walrus requires MEMWAL_PRIVATE_KEY, MEMWAL_ACCOUNT_ID and MEMWAL_SERVER_URL.", "CONFIG_MISSING");
+  }
+  const serverUrl = e.MEMWAL_SERVER_URL.replace(/\/+$/, "");
+  if (!/^https:\/\//.test(serverUrl)) throw new ConfigError("MEMWAL_SERVER_URL must use https.");
+  const network = serverUrl === WALRUS_TESTNET_RELAYER ? "testnet" : serverUrl === WALRUS_MAINNET_RELAYER ? "mainnet" : "unknown";
+  if (network !== "testnet" && e.ALLOW_WALRUS_MAINNET !== "true") {
+    throw new ConfigError(
+      `MEMWAL_SERVER_URL is not the Walrus Memory Testnet relayer. Using ${network === "mainnet" ? "the Mainnet relayer" : "another relayer"} requires ALLOW_WALRUS_MAINNET=true and explicit approval.`,
+    );
+  }
+  return {
+    provider: "walrus",
+    namespacePrefix: e.MEMWAL_NAMESPACE_PREFIX,
+    sessionSecret: e.SESSION_SECRET,
+    key: e.MEMWAL_PRIVATE_KEY,
+    accountId: e.MEMWAL_ACCOUNT_ID,
+    serverUrl,
+    network,
   };
 }
 
