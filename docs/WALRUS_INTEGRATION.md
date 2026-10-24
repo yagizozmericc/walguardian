@@ -5,7 +5,8 @@
 - **The application integration is implemented** (Phase 6) behind a provider-neutral client that mirrors the official SDK. It runs today on the **development mock** (`MEMORY_PROVIDER=mock`, the SDK's `MemWalMock` plus a local file). The mock is **not Walrus**.
 - **The Testnet relayer and dashboard** (`relayer-staging` and `staging.memory.walrus.xyz`) still serve a certificate for `*.up.railway.app`, so the SDK cannot connect. The docs list no other Testnet endpoint.
 - **Credentials.** The configured `MEMWAL_ACCOUNT_ID` was not found as an object on Testnet or on Mainnet (read-only lookups), and it is not an address with any activity. The delegate key has a valid format, but its registration cannot be confirmed.
-- **Owner decision.** Testnet first. Develop on the mock. No Mainnet, no blockchain transactions, no real memory writes.
+- **Owner decision (updated 2026-10-24).** Move memory to the **Walrus Memory Mainnet relayer**, with **non-sensitive synthetic data only**, so memory persists on hosted deployments (Vercel has no writable persistent disk for the mock). Tatum and all other blockchain data stay on Sui Testnet. The owner creates the account on the dashboard. Read-only checks run first; any write test needs separate approval.
+- *Previous decision:* Testnet first, develop on the mock, no Mainnet. The Testnet relayer still fails TLS (re-checked 2026-10-24).
 - **No memory writes and no transactions have been made** on any Walrus network.
 
 ### Switching to a live relayer (when available)
