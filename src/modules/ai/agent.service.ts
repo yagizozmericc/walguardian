@@ -17,7 +17,7 @@ import { loadReviewKnowledge } from "@/modules/security/security.memory";
 import { getSecurityReport } from "@/modules/security/security.service";
 import { defaultStrategySettings } from "@/modules/strategy/strategy.defaults";
 import { evaluateStrategy } from "@/modules/strategy/strategy.service";
-import { ModelAnswerSchema, MODEL_ANSWER_JSON_SCHEMA, type CopilotResponse } from "./ai.types";
+import { ModelAnswerSchema, MODEL_ANSWER_JSON_SCHEMA, type AgentContext, type CopilotResponse } from "./ai.types";
 import { buildContext, type ContextInputs } from "./context.builder";
 import { deterministicSummary } from "./fallback";
 import { GeminiProvider } from "./gemini.provider";
@@ -96,14 +96,15 @@ export async function gatherContext(address: string, question: string, memory: M
   };
 }
 
-export async function answerQuestion(opts: {
-  address: string;
+/** Runs the grounded LLM step on a prepared context, with rate limiting and the deterministic fallback. */
+export async function explainWithContext(opts: {
+  ctx: AgentContext;
   question: string;
   history: { role: "user" | "assistant"; text: string }[];
-  memory: MemoryService | null;
   rateKey: string;
+  extraSystem?: string;
 }): Promise<CopilotResponse> {
-  const ctx = buildContext(await gatherContext(opts.address, opts.question, opts.memory));
+  const { ctx } = opts;
   const base = { sections: ctx.sections, generatedAt: new Date().toISOString() };
   const fallback = (reason: string, warnings: string[] = []): CopilotResponse => {
     const f = deterministicSummary(ctx, reason);
@@ -115,12 +116,13 @@ export async function answerQuestion(opts: {
   const rate = getLimiter().check(opts.rateKey);
   if (!rate.allowed) return fallback(`${rate.reason}; try again in ${rate.retryAfterS}s`);
 
+  const cfg = env().llm;
   try {
     const r = await model.generateJson({
-      system: SYSTEM_PROMPT,
+      system: opts.extraSystem ? `${SYSTEM_PROMPT}\n\n${opts.extraSystem}` : SYSTEM_PROMPT,
       user: buildUserPrompt(opts.question, ctx, opts.history),
       schema: MODEL_ANSWER_JSON_SCHEMA as unknown as Record<string, unknown>,
-      maxOutputTokens: env().llm.provider === "gemini" ? (env().llm as { maxOutputTokens: number }).maxOutputTokens : 1200,
+      maxOutputTokens: cfg.provider === "gemini" ? cfg.maxOutputTokens : 1200,
     });
     const parsed = ModelAnswerSchema.safeParse(r.json);
     if (!parsed.success) return fallback("the model returned malformed output", ["The model response did not match the expected format."]);
@@ -131,4 +133,15 @@ export async function answerQuestion(opts: {
     logger.warn("copilot.llm_failed", { message: errText(err) });
     return fallback(errText(err));
   }
+}
+
+export async function answerQuestion(opts: {
+  address: string;
+  question: string;
+  history: { role: "user" | "assistant"; text: string }[];
+  memory: MemoryService | null;
+  rateKey: string;
+}): Promise<CopilotResponse> {
+  const ctx = buildContext(await gatherContext(opts.address, opts.question, opts.memory));
+  return explainWithContext({ ctx, question: opts.question, history: opts.history, rateKey: opts.rateKey });
 }
