@@ -1,5 +1,6 @@
 import "server-only";
 import { ValidationError } from "@/lib/errors";
+import { readJsonBody } from "@/lib/request-guard";
 import { SuiAddressSchema } from "@/lib/sui-address";
 import { getPrincipal } from "@/modules/session/session.server";
 import { getMemoryService } from "./memory.factory";
@@ -17,12 +18,7 @@ export function walletParam(value: string | null): string {
   return parsed.data;
 }
 
-export async function readJson(req: Request, maxBytes = 128 * 1024): Promise<unknown> {
-  const text = await req.text();
-  if (text.length > maxBytes) throw new ValidationError("Request body too large.");
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new ValidationError("Request body must be JSON.");
-  }
+/** JSON-only, size-capped body reader (see lib/request-guard). */
+export function readJson(req: Request, maxBytes = 128 * 1024): Promise<unknown> {
+  return readJsonBody(req, maxBytes);
 }

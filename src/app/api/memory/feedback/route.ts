@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ValidationError } from "@/lib/errors";
 import { handle } from "@/lib/http";
+import { enforceRateLimit } from "@/lib/request-guard";
 import { getSuiProvider } from "@/modules/blockchain/sui.adapter";
 import { memoryForRequest, readJson, walletParam } from "@/modules/memory/memory.http";
 import { saveFeedback } from "@/modules/memory/memory.repositories";
@@ -16,6 +17,7 @@ const BodySchema = z.object({
 
 export async function POST(req: Request) {
   return handle("POST /api/memory/feedback", async () => {
+    await enforceRateLimit("tatum");
     const parsed = BodySchema.safeParse(await readJson(req));
     if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message ?? "Invalid feedback.");
     const wallet = walletParam(parsed.data.address);

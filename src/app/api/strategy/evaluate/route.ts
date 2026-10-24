@@ -1,5 +1,6 @@
 import { ValidationError } from "@/lib/errors";
 import { handle } from "@/lib/http";
+import { enforceRateLimit, readJsonBody } from "@/lib/request-guard";
 import { SuiAddressSchema } from "@/lib/sui-address";
 import { getSuiProvider } from "@/modules/blockchain/sui.adapter";
 import { evaluateStrategy } from "@/modules/strategy/strategy.service";
@@ -9,14 +10,8 @@ const MAX_BODY_BYTES = 128 * 1024;
 
 export async function POST(req: Request) {
   return handle("POST /api/strategy/evaluate", async () => {
-    const text = await req.text();
-    if (text.length > MAX_BODY_BYTES) throw new ValidationError("Request body too large.");
-    let json: unknown;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      throw new ValidationError("Request body must be JSON.");
-    }
+    await enforceRateLimit("tatum");
+    const json = await readJsonBody(req, MAX_BODY_BYTES);
     const parsed = StrategyRequestSchema.safeParse(json);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
