@@ -5,6 +5,21 @@ import { newRequestId } from "@/lib/http";
 import { getSuiProvider } from "@/modules/blockchain/sui.adapter";
 import type { IntegrationStatusItem, IntegrationStatusResponse } from "@/lib/status-types";
 import { getMemoryClient, memoryProviderInfo } from "@/modules/memory/memory.factory";
+import { getLlm } from "@/modules/ai/agent.service";
+
+let llmHealth: { at: number; item: IntegrationStatusItem } | null = null;
+
+/** Model metadata check (no generation), cached for 10 minutes. */
+async function llmStatus(): Promise<IntegrationStatusItem> {
+  const base = { id: "llm" as const, label: "AI model", checkedAt: new Date().toISOString() };
+  const llm = getLlm();
+  if (!llm) return { ...base, state: "not_configured", detail: "GEMINI_API_KEY is not set; the copilot shows deterministic summaries." };
+  if (llmHealth && Date.now() - llmHealth.at < 600_000) return llmHealth.item;
+  const h = await llm.health();
+  const item: IntegrationStatusItem = { ...base, state: h.ok ? "connected" : "error", detail: `Gemini ${llm.model} (free tier): ${h.detail}` };
+  llmHealth = { at: Date.now(), item };
+  return item;
+}
 
 async function memoryStatus(): Promise<IntegrationStatusItem> {
   const base = { id: "walrus" as const, label: "Walrus Memory", checkedAt: new Date().toISOString() };
@@ -40,17 +55,10 @@ export async function GET() {
   const requestId = newRequestId();
   try {
     const e = env();
-    const checkedAt = new Date().toISOString();
     const integrations: IntegrationStatusItem[] = [
       await tatumStatus(),
       await memoryStatus(),
-      {
-        id: "llm",
-        label: "AI model",
-        state: "not_configured",
-        detail: "Copilot integration is not implemented yet (Phase 7).",
-        checkedAt,
-      },
+      await llmStatus(),
     ];
     const body: IntegrationStatusResponse = { network: e.network, integrations };
     return Response.json(body, { headers: { "x-request-id": requestId } });
