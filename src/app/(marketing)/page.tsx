@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BRAND_NAME, BRAND_TAGLINE } from "@/components/brand/logo";
+import { OG_IMAGE, SITE_DESCRIPTION } from "@/lib/site";
 import { Copilot } from "@/components/marketing/copilot";
 import { Ecosystem } from "@/components/marketing/ecosystem";
 import { FinalCta } from "@/components/marketing/final-cta";
@@ -12,22 +13,23 @@ import { TransferCheck } from "@/components/marketing/transfer-check";
 import { Trust } from "@/components/marketing/trust";
 
 const TITLE = `${BRAND_NAME} — ${BRAND_TAGLINE}`;
-const DESCRIPTION =
-  "The financial copilot that remembers. Security intelligence, savings goals, portfolio insights and financial memory for your Sui wallet, in one place.";
 
+// Next merges metadata shallowly, so `openGraph` here must repeat the image
+// from the root layout or the page would lose it.
 export const metadata: Metadata = {
   title: { absolute: TITLE },
-  description: DESCRIPTION,
+  description: SITE_DESCRIPTION,
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     url: "/",
     siteName: BRAND_NAME,
-    title: TITLE,
-    description: DESCRIPTION,
     locale: "en_US",
+    title: TITLE,
+    description: SITE_DESCRIPTION,
+    images: [OG_IMAGE],
   },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: TITLE, description: SITE_DESCRIPTION, images: [OG_IMAGE] },
 };
 
 export default function LandingPage() {

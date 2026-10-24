@@ -524,7 +524,8 @@ A public marketing page at `/`. It sits outside the dashboard shell and loads no
 - Server-rendered and prerendered as static. The only client components are the mobile menu and the Copilot question switcher.
 - Scroll reveals use CSS scroll-driven animations (no JavaScript; content stays visible where they are unsupported). All motion is disabled under `prefers-reduced-motion`.
 - The theme is scoped to `.marketing` in `(marketing)/marketing.css`, so the dashboard palette is unchanged.
-- SEO: page metadata, canonical URL, Open Graph and Twitter tags, a generated `opengraph-image`, `robots.txt`, `sitemap.xml`, and an SVG icon. Absolute URLs use `SITE_URL`.
+- SEO: page metadata, canonical URL, Open Graph and Twitter tags, `robots.txt`, `sitemap.xml`, and an SVG icon. The social preview is a static `public/og-image.png` (1200×630), regenerated with `npm run og:image`.
+- Absolute URLs come from `SITE_URL`, falling back to Vercel's injected URLs (branch URL on previews, `VERCEL_PROJECT_PRODUCTION_URL` in production) and then to localhost. An earlier deploy without `SITE_URL` pointed `og:image` at localhost, so X showed no image.
 
 **Claims policy.** Walrus Memory is described as the intended persistence layer, integrated through the official SDK. The demo runs on the labelled development mock, and live persistence is shown as not yet verified. Transfer check is described as simulation-only. The technology section states that no partnership or endorsement is implied.
 
@@ -542,7 +543,7 @@ A public marketing page at `/`. It sits outside the dashboard shell and loads no
 
 | Variable | Phase | Notes |
 |---|---|---|
-| `SITE_URL` | Landing | Public origin for Open Graph, canonical and sitemap URLs. Default `http://localhost:3000`. |
+| `SITE_URL` | Landing | Optional public origin for Open Graph, canonical and sitemap URLs. On Vercel it defaults to the deployment's own URL; locally to `http://localhost:3000`. |
 | `SUI_NETWORK` | 1 | `testnet` (default). `mainnet` is rejected unless `ALLOW_MAINNET=true`. |
 | `ALLOW_MAINNET` | 1 | Leave unset. Requires the project owner's explicit approval. |
 | `TATUM_API_KEY` | 2 | Tatum **Testnet** key. Server-only. |

@@ -14,7 +14,8 @@
     "check:protect": "tsx --conditions=react-server scripts/check-protect.ts",
     "demo:protect": "tsx --conditions=react-server scripts/demo-protect.ts",
     "check:walrus": "tsx --conditions=react-server scripts/check-walrus.ts",
-    "check:llm": "tsx --conditions=react-server scripts/check-llm.ts"
+    "check:llm": "tsx --conditions=react-server scripts/check-llm.ts",
+    "og:image": "tsx scripts/generate-og-image.tsx"
   },
   "dependencies": {
     "@google/genai": "^2.31.0",

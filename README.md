@@ -28,7 +28,7 @@ npm run dev                  # http://localhost:3000
 | `/security`, `/savings`, `/strategy`, `/assess`, `/memory` | App modules |
 | `/api/*` | Server routes used by the app |
 
-Set `SITE_URL` in production so Open Graph, canonical and sitemap URLs are absolute.
+On Vercel, Open Graph, canonical and sitemap URLs use the deployment's own URL automatically. Set `SITE_URL` to use a custom domain instead.
 
 ## Scripts
 
@@ -43,6 +43,7 @@ Set `SITE_URL` in production so Open Graph, canonical and sitemap URLs are absol
 | `npm run check:protect -- 0xADDRESS` | Live Protect run: security status, behavioral baseline, and the top-scored transactions with their signals |
 | `npm run check:walrus` | Memory provider check: configuration, health and listing (read-only). `--write-test` with `CONFIRM_WALRUS_TEST_WRITE=yes` writes one synthetic record |
 | `npm run check:llm` | Gemini check: model health and one small structured request (the key is never printed) |
+| `npm run og:image` | Regenerates the 1200×630 social preview at `public/og-image.png` |
 | `npm run demo:protect` | Runs the scoring engine on **labelled fixture** scenarios (synthetic data) to demonstrate each rule |
 
 ## Integration notes
