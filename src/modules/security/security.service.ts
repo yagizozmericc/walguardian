@@ -7,7 +7,7 @@ import { candidateFromActivity } from "./anomaly.engine";
 import { buildBaseline } from "./baseline.service";
 import { assessCandidate } from "./risk.engine";
 import { RULE_CONFIG, RULES_VERSION } from "./rules.config";
-import type { AssessedTransaction, SecurityReport, SecurityStatus, Severity } from "./security.types";
+import type { AssessedTransaction, FeedbackKnowledge, SecurityReport, SecurityStatus, Severity } from "./security.types";
 
 /**
  * Reconstructs, for each transaction, the watched address's coin balances
@@ -42,10 +42,17 @@ export function reconstructBalancesBefore(
 
 const SEVERITY_ORDER: Severity[] = ["high", "medium", "low", "none"];
 
+/** Transactions still needing attention: everything except non-critical ones you reviewed as expected. */
+export function openTransactions(assessed: AssessedTransaction[]): AssessedTransaction[] {
+  return assessed.filter((a) => !(a.review?.verdict === "expected" && !a.review.remainsFlagged));
+}
+
 export function summarize(
   assessed: AssessedTransaction[],
   outgoingCount: number,
 ): { status: SecurityStatus; summary: string } {
+  const reviewed = assessed.length - openTransactions(assessed).length;
+  assessed = openTransactions(assessed);
   const counts = countSeverities(assessed);
   const critical = assessed.some((a) => a.assessment.signals.some((s) => s.critical));
   if (critical || counts.high > 0) {
@@ -71,7 +78,7 @@ export function summarize(
   }
   return {
     status: "no_anomalies",
-    summary: "No medium or high deviations from this wallet's history were found in the analysed window. This is not a guarantee that the wallet is safe.",
+    summary: `No medium or high deviations from this wallet's history${reviewed > 0 ? ` remain open (${reviewed} reviewed as expected)` : " were found in the analysed window"}. This is not a guarantee that the wallet is safe.`,
   };
 }
 
@@ -85,12 +92,15 @@ export function countSeverities(assessed: AssessedTransaction[]): Record<Severit
 export function assessHistory(
   activity: ActivityItem[],
   balancesBefore: Map<string, Map<string, bigint> | null>,
+  feedback: FeedbackKnowledge[] = [],
 ): AssessedTransaction[] {
   const assessed: AssessedTransaction[] = [];
+  const byDigest = new Map(feedback.map((f) => [f.digest, f]));
   for (const a of activity) {
     const candidate = candidateFromActivity(a);
     if (!candidate) continue;
-    const assessment = assessCandidate(candidate, activity, balancesBefore.get(a.digest) ?? null);
+    const assessment = assessCandidate(candidate, activity, balancesBefore.get(a.digest) ?? null, feedback);
+    const f = byDigest.get(a.digest);
     assessed.push({
       digest: a.digest,
       timestampMs: a.timestampMs,
@@ -104,6 +114,9 @@ export function assessHistory(
       recipients: a.recipients,
       moveCalls: a.moveCalls,
       assessment,
+      review: f
+        ? { verdict: f.verdict, note: f.note, memoryId: f.memoryId, createdAt: f.createdAt, remainsFlagged: assessment.signals.some((s) => s.critical) }
+        : null,
     });
   }
   return assessed.sort(
@@ -117,17 +130,18 @@ export function assessHistory(
 export async function getSecurityReport(
   provider: SuiTatumProvider,
   address: string,
-  opts: { fresh?: boolean } = {},
+  opts: { fresh?: boolean; memory?: SecurityReport["memory"]; feedback?: FeedbackKnowledge[] } = {},
 ): Promise<SecurityReport> {
   const history = await getAddressHistory(provider, address, { fresh: opts.fresh });
   const balancesBefore = reconstructBalancesBefore(address, history.balances, history.transactions);
-  const assessed = assessHistory(history.activity, balancesBefore);
+  const assessed = assessHistory(history.activity, balancesBefore, opts.feedback ?? []);
   const baseline = buildBaseline(history.activity);
   const { status, summary } = summarize(assessed, baseline.outgoingTransferCount);
 
   const notes = [
     "Analysis is historical and refreshed manually. Guardian does not monitor in real time and cannot block transactions made in external wallets.",
     "Each transaction is scored only against transactions that happened before it.",
+    "Your reviews personalize later assessments (known or flagged recipients) but never clear a critical signal.",
   ];
   if (!history.complete) {
     notes.push(
@@ -144,6 +158,8 @@ export async function getSecurityReport(
     status,
     statusSummary: summary,
     severityCounts: countSeverities(assessed),
+    openCounts: countSeverities(openTransactions(assessed)),
+    memory: opts.memory ?? { status: "not_configured", provider: null, feedbackCount: 0, detail: "Memory was not consulted." },
     assessed,
     baseline,
     analysedTransactionCount: history.transactions.length,

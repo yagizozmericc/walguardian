@@ -2,7 +2,7 @@ import type { ActivityItem } from "@/modules/portfolio/portfolio.types";
 import { evaluateRules } from "./anomaly.engine";
 import { buildBaseline } from "./baseline.service";
 import { RULE_CONFIG } from "./rules.config";
-import type { Candidate, SecurityAssessment, Severity } from "./security.types";
+import type { Candidate, FeedbackKnowledge, SecurityAssessment, Severity } from "./security.types";
 
 export function severityFor(score: number, hasCritical: boolean): Severity {
   if (hasCritical || score >= RULE_CONFIG.severity.high) return "high";
@@ -19,12 +19,13 @@ export function assessCandidate(
   candidate: Candidate,
   history: ActivityItem[],
   balanceBefore: Map<string, bigint> | null,
+  feedback: FeedbackKnowledge[] = [],
 ): SecurityAssessment {
   const prior = history.filter(
     (a) => a.digest !== candidate.digest && a.timestampMs !== null && a.timestampMs < candidate.timestampMs,
   );
   const baseline = buildBaseline(prior);
-  const { signals, limitations, notes } = evaluateRules(candidate, { baseline, prior, balanceBefore });
+  const { signals, limitations, notes } = evaluateRules(candidate, { baseline, prior, balanceBefore, feedback });
   const score = Math.min(100, signals.reduce((s, x) => s + x.points, 0));
   return {
     transactionId: candidate.digest,

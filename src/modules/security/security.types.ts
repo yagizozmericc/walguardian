@@ -9,7 +9,8 @@ export type RuleId =
   | "FREQUENCY_SPIKE"
   | "NEW_PACKAGE"
   | "LARGE_OUTFLOW"
-  | "NEW_ASSET";
+  | "NEW_ASSET"
+  | "USER_FLAGGED_RECIPIENT";
 
 /** A value cited as evidence. `digests` link the claim to specific onchain transactions. */
 export interface Evidence {
@@ -105,6 +106,27 @@ export interface BehavioralBaseline {
   confidence: Confidence;
 }
 
+/** A prior user review, persisted in memory, used to personalize later assessments. */
+export interface FeedbackKnowledge {
+  digest: string;
+  verdict: "expected" | "suspicious" | "unsure";
+  note: string | null;
+  recipients: string[];
+  packages: string[];
+  transactionTimeMs: number | null;
+  memoryId: string;
+  createdAt: string;
+}
+
+export interface TransactionReview {
+  verdict: FeedbackKnowledge["verdict"];
+  note: string | null;
+  memoryId: string;
+  createdAt: string;
+  /** True when the transaction carries a critical signal, which feedback never clears. */
+  remainsFlagged: boolean;
+}
+
 export interface AssessedTransaction {
   digest: string;
   timestampMs: number | null;
@@ -113,6 +135,7 @@ export interface AssessedTransaction {
   recipients: string[];
   moveCalls: { package: string; module: string; function: string }[];
   assessment: SecurityAssessment;
+  review: TransactionReview | null;
 }
 
 export type SecurityStatus = "insufficient_history" | "no_anomalies" | "review_recommended" | "attention_required";
@@ -124,6 +147,14 @@ export interface SecurityReport {
   statusSummary: string;
   /** Counts of assessed transactions by severity. */
   severityCounts: Record<Severity, number>;
+  /** Counts excluding transactions you reviewed as expected (critical ones always stay). */
+  openCounts: Record<Severity, number>;
+  memory: {
+    status: "applied" | "not_configured" | "unavailable" | "no_session";
+    provider: "walrus" | "mock" | null;
+    feedbackCount: number;
+    detail: string;
+  };
   /** Highest-score first; only transactions sent by the address are assessed. */
   assessed: AssessedTransaction[];
   baseline: BehavioralBaseline;

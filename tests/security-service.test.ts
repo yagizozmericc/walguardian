@@ -56,6 +56,7 @@ const assessed = (severity: SecurityAssessment["severity"], critical = false): A
     notes: [],
     baselineSize: 10,
   },
+  review: null,
 });
 
 describe("summarize", () => {

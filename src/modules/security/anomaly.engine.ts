@@ -4,7 +4,7 @@ import { formatUnits } from "@/lib/units";
 import type { ActivityItem } from "@/modules/portfolio/portfolio.types";
 import { buildBaseline, dailyCounts, nonFrameworkPackages, outflowsOf, sentTransactions } from "./baseline.service";
 import { RULE_CONFIG } from "./rules.config";
-import type { BehavioralBaseline, Candidate, Limitation, RiskSignal } from "./security.types";
+import type { BehavioralBaseline, Candidate, FeedbackKnowledge, Limitation, RiskSignal } from "./security.types";
 
 /**
  * Deterministic anomaly rules. Each rule compares a candidate against a
@@ -20,6 +20,15 @@ export interface RuleContext {
   prior: ActivityItem[];
   /** Coin balances immediately before the candidate, if reliably known. */
   balanceBefore: Map<string, bigint> | null;
+  /** User reviews from memory. Only reviews of earlier transactions apply. */
+  feedback?: FeedbackKnowledge[];
+}
+
+/** Reviews of transactions strictly before the candidate (never the candidate itself). */
+function priorReviews(c: Candidate, ctx: RuleContext, verdict: FeedbackKnowledge["verdict"]): FeedbackKnowledge[] {
+  return (ctx.feedback ?? []).filter(
+    (f) => f.verdict === verdict && f.digest !== c.digest && f.transactionTimeMs !== null && f.transactionTimeMs < c.timestampMs,
+  );
 }
 
 export interface RuleOutput {
@@ -75,11 +84,24 @@ function unusualAmount(c: Candidate, ctx: RuleContext, out: RuleOutput) {
   return best?.ratio ?? null;
 }
 
+/** Returns whether a recipient is unseen in onchain history (independent of feedback). */
 function newRecipient(c: Candidate, ctx: RuleContext, out: RuleOutput): boolean {
   if (c.recipients.length === 0) return false;
   const known = new Set(ctx.baseline.recipients.map((r) => r.address));
-  const unseen = c.recipients.filter((r) => !known.has(r));
-  if (unseen.length === 0) return false;
+  const unseenByHistory = c.recipients.filter((r) => !known.has(r));
+  if (unseenByHistory.length === 0) return false;
+
+  // Recipients the user confirmed as expected in an earlier review are not scored as new.
+  const trusted = new Map<string, FeedbackKnowledge>();
+  for (const f of priorReviews(c, ctx, "expected")) for (const r of f.recipients) trusted.set(r, f);
+  const unseen = unseenByHistory.filter((r) => !trusted.has(r));
+  for (const r of unseenByHistory.filter((x) => trusted.has(x))) {
+    const f = trusted.get(r)!;
+    out.notes.push(
+      `Recipient ${shortAddress(r)} has not been paid before in onchain history, but you marked an earlier transfer to it (${f.digest.slice(0, 8)}…) as expected${f.note ? ` ("${f.note}")` : ""}. Memory ${f.memoryId.slice(0, 8)}; not scored as new.`,
+    );
+  }
+  if (unseen.length === 0) return true;
 
   const novelty = ctx.baseline.recipientNoveltyRate;
   if (novelty === null) {
@@ -155,7 +177,12 @@ function newPackage(c: Candidate, ctx: RuleContext, out: RuleOutput) {
     return;
   }
   const known = new Set(ctx.baseline.packages.map((p) => p.packageId));
-  const unseen = c.packages.filter((p) => !known.has(p));
+  const trusted = new Set(priorReviews(c, ctx, "expected").flatMap((f) => f.packages));
+  const unseenByHistory = c.packages.filter((p) => !known.has(p));
+  const unseen = unseenByHistory.filter((p) => !trusted.has(p));
+  if (unseenByHistory.length > unseen.length) {
+    out.notes.push("A package new to this wallet's history appeared in a transaction you previously marked as expected; it was not scored as new.");
+  }
   if (unseen.length === 0) return;
   out.signals.push({
     rule: "NEW_PACKAGE",
@@ -221,6 +248,25 @@ function newAsset(c: Candidate, ctx: RuleContext, out: RuleOutput) {
   });
 }
 
+function userFlaggedRecipient(c: Candidate, ctx: RuleContext, out: RuleOutput) {
+  const flagged = priorReviews(c, ctx, "suspicious").filter((f) => f.recipients.some((r) => c.recipients.includes(r)));
+  if (flagged.length === 0) return;
+  const f = flagged[flagged.length - 1];
+  const r = f.recipients.find((x) => c.recipients.includes(x))!;
+  out.signals.push({
+    rule: "USER_FLAGGED_RECIPIENT",
+    title: "Recipient you marked as suspicious",
+    points: RULE_CONFIG.userFlaggedRecipient.points,
+    critical: true,
+    explanation: `You previously marked a transfer to ${shortAddress(r)} (${f.digest.slice(0, 8)}…) as suspicious${f.note ? ` ("${f.note}")` : ""}. This is your own assessment from memory, not independent evidence.`,
+    evidence: [
+      { label: "Recipient", value: r },
+      { label: "Your earlier review", value: `${f.verdict} on ${f.createdAt.slice(0, 10)}`, digests: [f.digest] },
+      { label: "Memory record", value: f.memoryId },
+    ],
+  });
+}
+
 export function evaluateRules(c: Candidate, ctx: RuleContext): RuleOutput {
   const out: RuleOutput = { signals: [], limitations: [], notes: [] };
   const amountRatio = unusualAmount(c, ctx, out);
@@ -229,6 +275,7 @@ export function evaluateRules(c: Candidate, ctx: RuleContext): RuleOutput {
   newPackage(c, ctx, out);
   largeOutflow(c, ctx, out);
   newAsset(c, ctx, out);
+  userFlaggedRecipient(c, ctx, out);
 
   // A very large amount to a never-seen recipient is critical regardless of novelty weighting.
   if (amountRatio !== null && recipientIsNew && amountRatio > BigInt(RULE_CONFIG.criticalAmountToNewRecipientPct)) {

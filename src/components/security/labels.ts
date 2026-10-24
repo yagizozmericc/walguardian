@@ -7,6 +7,7 @@ export const RULE_LABEL: Record<RuleId, string> = {
   NEW_PACKAGE: "New package",
   LARGE_OUTFLOW: "Outflow",
   NEW_ASSET: "New asset",
+  USER_FLAGGED_RECIPIENT: "Flagged by you",
 };
 
 export const SEVERITY_LABEL: Record<Severity, string> = {

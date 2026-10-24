@@ -2,7 +2,7 @@
  * Deterministic scoring configuration for Protect. Changing any value here
  * changes scores, so bump RULES_VERSION and update the tests together.
  */
-export const RULES_VERSION = "protect-rules/1";
+export const RULES_VERSION = "protect-rules/2";
 
 export const RULE_CONFIG = {
   /** Minimum prior outgoing transfers of a coin before amounts are compared against its distribution. */
@@ -44,6 +44,8 @@ export const RULE_CONFIG = {
     ],
   },
   newAsset: { points: 10 },
+  /** A recipient the user previously reviewed as suspicious (always critical). */
+  userFlaggedRecipient: { points: 30 },
   /** An amount this far above p95 sent to a never-seen recipient is treated as critical. */
   criticalAmountToNewRecipientPct: 500,
 
