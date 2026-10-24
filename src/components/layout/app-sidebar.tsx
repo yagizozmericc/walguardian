@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BRAND_NAME, LogoMark } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav-items";
 import { IntegrationStatus } from "./integration-status";
@@ -11,7 +12,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-px" aria-label="Primary">
       {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-        const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        const active = pathname.startsWith(href);
         return (
           <Link
             key={href}
@@ -35,18 +36,10 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
 export function Wordmark() {
   return (
-    <div className="flex items-center gap-2 px-2.5">
-      <svg viewBox="0 0 16 16" className="size-4 text-brand" aria-hidden>
-        <path
-          d="M8 1.5 2.5 3.75v4.1c0 3.1 2.3 5.6 5.5 6.65 3.2-1.05 5.5-3.55 5.5-6.65v-4.1L8 1.5Z"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <span className="text-[13px] font-semibold tracking-tight">Guardian</span>
-    </div>
+    <Link href="/" className="flex items-center gap-2 rounded-md px-2.5" aria-label={`${BRAND_NAME} home`}>
+      <LogoMark className="text-brand" />
+      <span className="text-[13px] font-semibold tracking-tight">{BRAND_NAME}</span>
+    </Link>
   );
 }
 
