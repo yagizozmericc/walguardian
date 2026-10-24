@@ -1,0 +1,152 @@
+/*
+ * Landing-page theme. Scoped to `.marketing` so the dashboard keeps its
+ * graphite palette. Product previews inherit these tokens through the same
+ * Tailwind utilities the app uses (bg-surface, text-subtle, …).
+ */
+.marketing {
+  --ink: oklch(0.12 0.02 264);
+  --background: oklch(0.145 0.024 264);
+  --surface: oklch(0.175 0.026 263);
+  --surface-raised: oklch(0.2 0.028 263);
+  --card: var(--surface);
+  --popover: var(--surface-raised);
+  --muted: oklch(0.22 0.026 263);
+  --secondary: oklch(0.22 0.026 263);
+  --accent: oklch(0.24 0.028 263);
+  --foreground: oklch(0.965 0.006 260);
+  --muted-foreground: oklch(0.75 0.02 260);
+  --subtle: oklch(0.66 0.022 260);
+  --border: oklch(0.86 0.04 260 / 9%);
+  --input: oklch(0.86 0.04 260 / 12%);
+  --brand: oklch(0.82 0.11 205);
+  --brand-muted: oklch(0.82 0.11 205 / 12%);
+  --electric: oklch(0.67 0.17 258);
+  --ring: oklch(0.67 0.17 258);
+  --primary: oklch(0.965 0.006 260);
+  --primary-foreground: oklch(0.15 0.024 264);
+
+  background-color: var(--ink);
+  color: var(--foreground);
+}
+
+html:has(.marketing) {
+  background-color: oklch(0.12 0.02 264);
+  scroll-padding-top: 5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.marketing) {
+    scroll-behavior: smooth;
+  }
+}
+
+.mk-heading {
+  font-feature-settings: "cv11", "ss01", "ss03";
+}
+
+/* Headline gradient: white into the brand cyan, kept subtle. Uses
+   background-image, not the `background` shorthand: the build emits a colour
+   fallback rule, and a repeated shorthand would reset background-clip. */
+.mk-gradient-text {
+  background-image: linear-gradient(100deg, var(--foreground) 10%, oklch(0.86 0.08 215) 55%, var(--electric) 105%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Fine engineering grid that fades out from the top centre. */
+.mk-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.86 0.04 260 / 5%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.86 0.04 260 / 5%) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 75%);
+}
+
+.mk-glow {
+  background: radial-gradient(ellipse 50% 45% at 50% 0%, oklch(0.67 0.17 258 / 18%), transparent 70%);
+}
+
+/* Product frames sit on a soft halo so they read as screens, not cards. */
+.mk-frame {
+  box-shadow:
+    0 0 0 1px oklch(0 0 0 / 30%),
+    0 30px 80px -30px oklch(0.05 0.03 264 / 90%),
+    0 0 120px -40px oklch(0.67 0.17 258 / 25%);
+}
+
+.mk-hairline {
+  background: linear-gradient(to right, transparent, oklch(0.86 0.04 260 / 14%), transparent);
+}
+
+/* ---- Motion ---------------------------------------------------------------- */
+
+@keyframes mk-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes mk-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes mk-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@keyframes mk-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mk-enter {
+    animation: mk-enter 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: var(--mk-delay, 0ms);
+  }
+
+  /* Scroll reveals use scroll-driven animations: no JavaScript, and content
+     stays fully visible in browsers that do not support them. */
+  @supports (animation-timeline: view()) {
+    .mk-reveal {
+      animation: mk-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+  }
+
+  .mk-flow {
+    stroke-dasharray: 4 8;
+    animation: mk-flow 1.4s linear infinite;
+  }
+
+  .mk-pulse {
+    animation: mk-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mk-flow {
+    stroke-dasharray: 4 8;
+  }
+}

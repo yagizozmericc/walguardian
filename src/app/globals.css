@@ -41,6 +41,9 @@
   --color-subtle: var(--subtle);
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
+  /* Landing page only; defined under `.marketing` in (marketing)/marketing.css. */
+  --color-electric: var(--electric);
+  --color-ink: var(--ink);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
