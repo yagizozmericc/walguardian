@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import type { MemoryProviderInfo } from "@/modules/memory/memory.factory";
 import type { MemoryCategory, MemoryHistoryEntry, RecordStatus } from "@/modules/memory/memory.types";
 import { MemoryBanner } from "./memory-banner";
+import { SyntheticDemoControls } from "@/components/demo/synthetic-controls";
+import { useWatchAddress } from "@/components/providers/watch-context";
 
 interface RecordsResponse {
   provider: MemoryProviderInfo;
@@ -38,6 +40,7 @@ const STATUS_TEXT: Record<RecordStatus, string> = {
 
 export function MemoryView() {
   const { state, refresh } = useApiResource<RecordsResponse>("/api/memory/records");
+  const { address } = useWatchAddress();
   const [filter, setFilter] = useState<"current" | "all">("all");
   const data = state.status === "ready" ? state.data : null;
   const entries = useMemo(
@@ -68,6 +71,8 @@ export function MemoryView() {
           "Walrus records cannot be erased early: deleting writes a deletion record, and earlier records remain until they expire.",
         ]}
       />
+
+      {address && <SyntheticDemoControls address={address} />}
 
       {state.status === "error" && (
         <Panel className="mt-6">
@@ -130,7 +135,12 @@ export function MemoryView() {
                     <TableCell className="max-w-[420px] whitespace-normal">
                       {e.record ? (
                         <>
-                          <div className="line-clamp-2">{e.record.summary}</div>
+                          <div className="line-clamp-2">
+                            {e.record.summary.startsWith("[Synthetic demo]") && (
+                              <span className="mr-1.5 rounded-sm border border-warning/40 px-1 text-[10px] font-medium tracking-wide text-warning uppercase">Synthetic</span>
+                            )}
+                            {e.record.summary.replace(/^\[Synthetic demo\]\s*/, "")}
+                          </div>
                           {e.record.wallet && <div className="mt-0.5 font-mono text-[11px] text-subtle">{shortAddress(e.record.wallet)}</div>}
                         </>
                       ) : (

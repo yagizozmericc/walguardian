@@ -10,5 +10,6 @@ export interface IntegrationStatusItem {
 
 export interface IntegrationStatusResponse {
   network: "testnet" | "mainnet";
+  demo: { walletAddress: string; label: string; syntheticDataAvailable: boolean };
   integrations: IntegrationStatusItem[];
 }

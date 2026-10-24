@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatAmount, formatRelative, suiscanAccountUrl } from "@/lib/format";
 import { shortAddress } from "@/lib/sui-address";
 import type { PortfolioSnapshot } from "@/modules/portfolio/portfolio.types";
+import { CommandCenter } from "./command-center";
 
 export function OverviewView() {
   const { address } = useWatchAddress();
@@ -77,6 +78,7 @@ export function OverviewView() {
       {data && (
         <div className="space-y-6">
           <Summary data={data} activityCount={portfolio.activity.length} />
+          <CommandCenter address={address} />
 
           {data.warnings.length > 0 && (
             <ul className="space-y-1 rounded-lg border border-warning/30 bg-warning-muted px-4 py-3 text-[13px] text-warning">

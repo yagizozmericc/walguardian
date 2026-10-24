@@ -36,7 +36,11 @@ export async function listGoals(s: MemoryService, wallet: string): Promise<Loade
   return { items: items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)), unreadable, expired: list.expired, truncated: list.truncated };
 }
 
-export async function saveGoal(s: MemoryService, wallet: string, goal: SavingsGoal): Promise<MemoryRecord> {
+/** Prefix marking records created by the synthetic demo seeder (never real user data). */
+export const SYNTHETIC_PREFIX = "[Synthetic demo]";
+export const isSynthetic = (r: { summary: string }) => r.summary.startsWith(SYNTHETIC_PREFIX);
+
+export async function saveGoal(s: MemoryService, wallet: string, goal: SavingsGoal, opts: { synthetic?: boolean } = {}): Promise<MemoryRecord> {
   const { byEntity } = await s.current("goal", { wallet });
   const prev = byEntity.get(`goal:${goal.id}`);
   const earmarked = formatAmount(formatUnits(earmarkedRaw(goal), goal.decimals));
@@ -47,7 +51,7 @@ export async function saveGoal(s: MemoryService, wallet: string, goal: SavingsGo
     entityId: `goal:${goal.id}`,
     wallet,
     supersedes: prev?.id ?? null,
-    summary: `${prev ? "Updated" : "New"} ${goal.kind === "reserve" ? "reserve" : "savings goal"} "${goal.name}": ${goal.kind === "reserve" ? "keep" : "reach"} ${formatAmount(goal.targetAmount)} ${unit}${goal.targetDate ? ` by ${goal.targetDate}` : ""}; ${earmarked} ${unit} earmarked.`,
+    summary: `${opts.synthetic ? `${SYNTHETIC_PREFIX} ` : ""}${prev ? "Updated" : "New"} ${goal.kind === "reserve" ? "reserve" : "savings goal"} "${goal.name}": ${goal.kind === "reserve" ? "keep" : "reach"} ${formatAmount(goal.targetAmount)} ${unit}${goal.targetDate ? ` by ${goal.targetDate}` : ""}; ${earmarked} ${unit} earmarked.`,
     data: goal,
   });
 }
@@ -69,7 +73,7 @@ export async function loadStrategy(s: MemoryService, wallet: string): Promise<{ 
   return { settings: parsed?.success ? parsed.data : null, memory: parsed?.success ? r : null };
 }
 
-export async function saveStrategy(s: MemoryService, wallet: string, settings: StrategySettings): Promise<MemoryRecord> {
+export async function saveStrategy(s: MemoryService, wallet: string, settings: StrategySettings, opts: { synthetic?: boolean } = {}): Promise<MemoryRecord> {
   const { memory } = await loadStrategy(s, wallet);
   const t = settings.targets;
   return s.write({
@@ -78,7 +82,7 @@ export async function saveStrategy(s: MemoryService, wallet: string, settings: S
     entityId: `strategy:${wallet}`,
     wallet,
     supersedes: memory?.id ?? null,
-    summary: `Investment preferences: ${t ? `targets SUI ${t.native}%, stablecoins ${t.stablecoin}%, other ${t.other}%` : "no targets"}; drift band ±${settings.driftBandPct}; risk ${settings.riskTolerance ?? "not set"}; horizon ${settings.horizon ?? "not set"}; ${settings.referencePrices.length} reference prices (user assumptions).`,
+    summary: `${opts.synthetic ? `${SYNTHETIC_PREFIX} ` : ""}Investment preferences: ${t ? `targets SUI ${t.native}%, stablecoins ${t.stablecoin}%, other ${t.other}%` : "no targets"}; drift band ±${settings.driftBandPct}; risk ${settings.riskTolerance ?? "not set"}; horizon ${settings.horizon ?? "not set"}; ${settings.referencePrices.length} reference prices (user assumptions).`,
     data: settings,
   });
 }

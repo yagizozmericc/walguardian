@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWatchAddress } from "@/components/providers/watch-context";
 import { SuiAddressSchema, shortAddress } from "@/lib/sui-address";
+import { useIntegrationStatus } from "./use-integration-status";
 
 /** Watch-only address entry. Entering an address never proves ownership. */
 export function AddressBar() {
   const { address, setAddress } = useWatchAddress();
+  const { data: status } = useIntegrationStatus();
+  const demo = status?.demo;
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -26,6 +29,11 @@ export function AddressBar() {
         <span className="truncate font-mono text-[13px]" title={address}>
           {shortAddress(address, 6)}
         </span>
+        {demo && address === demo.walletAddress && (
+          <span className="hidden shrink-0 rounded border border-warning/40 px-1.5 py-0.5 text-[11px] text-warning sm:inline" title={`${demo.label}. Public Sui Testnet address owned by a third party; Walguardian only reads it.`}>
+            Third-party demo wallet
+          </span>
+        )}
         <Button
           variant="ghost"
           size="icon-xs"
@@ -72,6 +80,11 @@ export function AddressBar() {
       <Button type="submit" size="default" variant="secondary">
         Analyze
       </Button>
+      {demo && (
+        <Button type="button" size="default" variant="ghost" className="hidden md:inline-flex" onClick={() => setAddress(demo.walletAddress)} title={demo.label}>
+          Use demo wallet
+        </Button>
+      )}
     </form>
   );
 }

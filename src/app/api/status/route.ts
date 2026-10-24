@@ -6,6 +6,7 @@ import { getSuiProvider } from "@/modules/blockchain/sui.adapter";
 import type { IntegrationStatusItem, IntegrationStatusResponse } from "@/lib/status-types";
 import { getMemoryClient, memoryProviderInfo } from "@/modules/memory/memory.factory";
 import { getLlm } from "@/modules/ai/agent.service";
+import { DEMO_WALLET_LABEL, demoWalletAddress } from "@/lib/demo";
 
 let llmHealth: { at: number; item: IntegrationStatusItem } | null = null;
 
@@ -60,7 +61,11 @@ export async function GET() {
       await memoryStatus(),
       await llmStatus(),
     ];
-    const body: IntegrationStatusResponse = { network: e.network, integrations };
+    const body: IntegrationStatusResponse = {
+      network: e.network,
+      integrations,
+      demo: { walletAddress: demoWalletAddress(), label: DEMO_WALLET_LABEL, syntheticDataAvailable: memoryProviderInfo().provider === "mock" },
+    };
     return Response.json(body, { headers: { "x-request-id": requestId } });
   } catch (err) {
     const { status, body } = toApiError(err, requestId);
