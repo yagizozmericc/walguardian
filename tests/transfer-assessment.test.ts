@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseUnits } from "@/lib/units";
-import { DISCLAIMER, assessTransfer, computeSpendable, estimateGas, type AssessmentInput } from "@/modules/assessment/transfer.engine";
+import { DISCLAIMER, assessTransfer, computeSpendable, estimateGas, otherStablecoinsValue, type AssessmentInput } from "@/modules/assessment/transfer.engine";
 import type { EnginePrice } from "@/modules/strategy/allocation.engine";
 import type { FeedbackKnowledge } from "@/modules/security/security.types";
 import { HOUR, KNOWN, NEXT_T, STRANGER, SUI, WALLET, regularHistory } from "./fixtures/protect.fixture";
@@ -107,26 +107,64 @@ describe("balance and gas", () => {
 describe("conservative Max (estimated available)", () => {
   const gas = { estimateMist: "1000000", samples: 20, basis: "historical_median" as const };
   it("deducts earmarks, the configured gas reserve and a 2× gas buffer from SUI", () => {
-    const s = computeSpendable({ ...SUI_ASSET, balance: sui("100"), earmarked: sui("30"), isSui: true, gas, settings: settings({ gasReserveSui: "10" }), price: price("2") });
+    const s = computeSpendable({ ...SUI_ASSET, balance: sui("100"), earmarked: sui("30"), isSui: true, gas, settings: settings({ gasReserveSui: "10" }), price: price("2"), otherStablecoinsValueE8: 0n });
     expect(s).toMatchObject({ totalBalance: "100", earmarked: "30", gasBuffer: "0.002", gasReserve: "10", estimatedAvailable: "59.998" });
     expect(s.notes.join(" ")).toMatch(/an estimate, not a quote/);
   });
 
-  it("converts the stablecoin reserve with the reference price, or explains why it could not", () => {
-    const withPrice = computeSpendable({ ...USDC_ASSET, balance: usdc("300"), earmarked: usdc("100"), isSui: false, gas, settings: settings({ minStablecoinReserveUsd: "50" }), price: price("1") });
-    expect(withPrice).toMatchObject({ stablecoinReserve: "50", estimatedAvailable: "150", gasBuffer: "0" });
-    const noPrice = computeSpendable({ ...USDC_ASSET, balance: usdc("300"), earmarked: 0n, isSui: false, gas, settings: settings({ minStablecoinReserveUsd: "50" }), price: null });
-    expect(noPrice.estimatedAvailable).toBe("300");
-    expect(noPrice.notes.join(" ")).toMatch(/could not be converted to units without a reference price/);
+  const stable = (over: Partial<Parameters<typeof computeSpendable>[0]>) =>
+    computeSpendable({ ...USDC_ASSET, balance: usdc("300"), earmarked: 0n, isSui: false, gas, settings: settings({ minStablecoinReserveUsd: "50" }), price: price("1"), otherStablecoinsValueE8: 0n, ...over });
+
+  it("single stablecoin: deducts the full reserve converted at the reference price", () => {
+    expect(stable({ earmarked: usdc("100") })).toMatchObject({ stablecoinReserve: "50", estimatedAvailable: "150", gasBuffer: "0" });
+    // Reference price below $1 needs more units: $50 / $0.98 = 51.0204081… rounded up to 6 dp.
+    expect(stable({ price: price("0.98") }).stablecoinReserve).toBe("51.020409");
+  });
+
+  it("several stablecoins: deducts only the part of the reserve the others do not cover", () => {
+    expect(stable({ otherStablecoinsValueE8: parseUnits("30", 8) })).toMatchObject({ stablecoinReserve: "20", estimatedAvailable: "280" });
+    const covered = stable({ otherStablecoinsValueE8: parseUnits("80", 8) });
+    expect(covered).toMatchObject({ stablecoinReserve: "0", estimatedAvailable: "300" });
+    expect(covered.notes.join(" ")).toMatch(/not already covered by your other stablecoins \(\$80 at reference prices\)/);
+  });
+
+  it("an unpriced other stablecoin: conservatively keeps the full reserve in this coin", () => {
+    const r = stable({ otherStablecoinsValueE8: null });
+    expect(r).toMatchObject({ stablecoinReserve: "50", estimatedAvailable: "250" });
+    expect(r.notes.join(" ")).toMatch(/another stablecoin you hold has no reference price \(conservative\)/);
+  });
+
+  it("no price for the coin being sent: the reserve cannot be converted and is explained", () => {
+    const r = stable({ price: null });
+    expect(r.estimatedAvailable).toBe("300");
+    expect(r.notes.join(" ")).toMatch(/could not be converted to units without a reference price/);
+  });
+
+  it("the stablecoin reserve never reduces non-stablecoin assets", () => {
+    const s = computeSpendable({ ...SUI_ASSET, balance: sui("10"), earmarked: 0n, isSui: true, gas, settings: settings({ minStablecoinReserveUsd: "5000" }), price: price("2"), otherStablecoinsValueE8: 0n });
+    expect(s.stablecoinReserve).toBeNull();
+    expect(s.estimatedAvailable).toBe("9.998");
   });
 
   it("is never negative", () => {
-    expect(computeSpendable({ ...SUI_ASSET, balance: sui("1"), earmarked: sui("5"), isSui: true, gas, settings: null, price: null }).estimatedAvailable).toBe("0");
+    expect(computeSpendable({ ...SUI_ASSET, balance: sui("1"), earmarked: sui("5"), isSui: true, gas, settings: null, price: null, otherStablecoinsValueE8: 0n }).estimatedAvailable).toBe("0");
   });
 
   it("an amount above the estimate (but within the balance) is a caution", () => {
     const r = assessTransfer(input({ goals: [goal({ id: "r", kind: "reserve", targetDate: null, coinType: SUI, symbol: "SUI", decimals: 9, targetAmount: "990", earmark: "990" })], amountRaw: sui("15") }));
     expect(titles(r)).toContain("Above the estimated available amount");
+  });
+});
+
+describe("otherStablecoinsValue", () => {
+  const OTHER_STABLE = `0x${"5a".repeat(32)}::usdt::USDT`;
+  const h = (coinType: string, raw: bigint, decimals: number, assetClass: "native" | "stablecoin") => ({ coinType, symbol: null, decimals, assetClass, rawBalance: raw });
+  it("sums other priced stablecoins and excludes the coin being sent and non-stablecoins", () => {
+    const holdings = [h(USDC, usdc("100"), 6, "stablecoin"), h(OTHER_STABLE, usdc("40"), 6, "stablecoin"), h(SUI, sui("10"), 9, "native")];
+    expect(otherStablecoinsValue(holdings, new Map([[OTHER_STABLE, price("1")], [USDC, price("1")]]), USDC)).toBe(parseUnits("40", 8));
+  });
+  it("returns null when another held stablecoin has no price", () => {
+    expect(otherStablecoinsValue([h(OTHER_STABLE, usdc("40"), 6, "stablecoin")], new Map(), USDC)).toBeNull();
   });
 });
 

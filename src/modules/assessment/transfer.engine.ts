@@ -67,6 +67,23 @@ export interface SpendableInput {
   gas: GasEstimate;
   settings: StrategySettings | null;
   price: EnginePrice | null;
+  /**
+   * USD value (1e-8) of the user's OTHER verified stablecoins at reference prices,
+   * which also count toward the stablecoin reserve; null when any of them has no price.
+   */
+  otherStablecoinsValueE8: bigint | null;
+}
+
+/** Value of verified stablecoins other than `excludeCoinType`; null if any held one lacks a price. */
+export function otherStablecoinsValue(holdings: EngineHolding[], prices: Map<string, EnginePrice>, excludeCoinType: string): bigint | null {
+  let total = 0n;
+  for (const h of holdings) {
+    if (h.assetClass !== "stablecoin" || h.coinType === excludeCoinType || h.rawBalance === 0n) continue;
+    const p = prices.get(h.coinType);
+    if (!p || h.decimals === null) return null;
+    total += valueE8(h.rawBalance, h.decimals, p.priceE8);
+  }
+  return total;
 }
 
 export function computeSpendable(i: SpendableInput): SpendableBreakdown {
@@ -87,11 +104,21 @@ export function computeSpendable(i: SpendableInput): SpendableBreakdown {
   }
   let stableReserve: bigint | null = null;
   if (i.assetClass === "stablecoin" && i.settings?.minStablecoinReserveUsd) {
-    if (i.price) {
-      stableReserve = ceilDiv(parseUnits(i.settings.minStablecoinReserveUsd, USD_DECIMALS) * 10n ** BigInt(i.decimals), i.price.priceE8);
-      notes.push(`Keeps your minimum stablecoin reserve ($${i.settings.minStablecoinReserveUsd} at your reference price).`);
+    // The reserve applies to all verified stablecoins together: deduct only the part not covered by the others.
+    const minE8 = parseUnits(i.settings.minStablecoinReserveUsd, USD_DECIMALS);
+    if (!i.price) {
+      notes.push("Your minimum stablecoin reserve could not be converted to units without a reference price for this coin, so it was not deducted.");
     } else {
-      notes.push("Your minimum stablecoin reserve could not be converted to units without a reference price, so it was not deducted.");
+      const others = i.otherStablecoinsValueE8;
+      const remainingE8 = others === null ? minE8 : minE8 > others ? minE8 - others : 0n;
+      stableReserve = remainingE8 === 0n ? 0n : ceilDiv(remainingE8 * 10n ** BigInt(i.decimals), i.price.priceE8);
+      if (others === null) {
+        notes.push(`Keeps your full $${i.settings.minStablecoinReserveUsd} minimum stablecoin reserve in this coin, because another stablecoin you hold has no reference price (conservative).`);
+      } else if (others > 0n) {
+        notes.push(`Keeps the part of your $${i.settings.minStablecoinReserveUsd} minimum stablecoin reserve not already covered by your other stablecoins ($${formatAmount(formatUnits(others, USD_DECIMALS), 2)} at reference prices).`);
+      } else {
+        notes.push(`Keeps your minimum stablecoin reserve ($${i.settings.minStablecoinReserveUsd} at your reference price).`);
+      }
     }
   }
   if (i.earmarked > 0n) notes.push(`Excludes ${formatAmount(formatUnits(i.earmarked, i.decimals))} ${i.symbol ?? ""} earmarked for savings goals.`.replace(/ +\./, "."));
@@ -406,6 +433,7 @@ export function assessTransfer(input: AssessmentInput): AssessmentResult {
     gas: input.gas,
     settings,
     price,
+    otherStablecoinsValueE8: otherStablecoinsValue(input.holdings, input.prices, asset.coinType),
   });
   if (!insufficientBalance && amountRaw > parseUnits(spendable.estimatedAvailable, asset.decimals)) {
     add({ pillar: "save", category: "preference", level: "caution", title: "Above the estimated available amount", detail: `The amount exceeds the conservative estimate of ${formatAmount(spendable.estimatedAvailable, 6)} ${asset.symbol ?? ""} available after earmarks, reserves and a gas buffer.` });

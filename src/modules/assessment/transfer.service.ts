@@ -17,7 +17,7 @@ import { openTransactions, getSecurityReport } from "@/modules/security/security
 import { USD_DECIMALS, type BuyAsset, type EngineHolding, type EnginePrice } from "@/modules/strategy/allocation.engine";
 import type { AllocationClass } from "@/modules/strategy/strategy.types";
 import { lookupRecipient } from "./recipient";
-import { DISCLAIMER, assessTransfer, computeSpendable, estimateGas, type AssessmentInput } from "./transfer.engine";
+import { DISCLAIMER, assessTransfer, computeSpendable, estimateGas, otherStablecoinsValue, type AssessmentInput } from "./transfer.engine";
 import type { SpendableBreakdown, TransferAssessment, TransferRequest } from "./transfer.types";
 
 /** Gathers inputs (Tatum, memory, pricing) and runs the deterministic assessment. Simulation only. */
@@ -108,10 +108,20 @@ async function priceMap(network: "testnet" | "mainnet", coinTypes: string[], set
   return prices;
 }
 
+async function holdingsFor(provider: SuiTatumProvider, network: "testnet" | "mainnet", balances: Map<string, bigint>): Promise<EngineHolding[]> {
+  const out: EngineHolding[] = [];
+  for (const [c, bal] of balances) {
+    const m = await provider.getCoinMetadata(c).catch(() => null);
+    out.push({ coinType: c, symbol: m?.symbol ?? null, decimals: m?.decimals ?? null, assetClass: classifyAsset(network, c).assetClass, rawBalance: bal });
+  }
+  return out;
+}
+
 export async function spendableFor(provider: SuiTatumProvider, wallet: string, rawCoinType: string, memory: MemoryService | null): Promise<SpendableBreakdown> {
   const base = await loadBase(provider, wallet, rawCoinType);
   const mem = await loadMemory(memory, wallet, null);
-  const prices = await priceMap(base.network, [base.coinType], mem.settings);
+  const holdings = await holdingsFor(provider, base.network, base.balances);
+  const prices = await priceMap(base.network, [...new Set([base.coinType, ...base.balances.keys()])], mem.settings);
   const earmarked = mem.goals.filter((g) => g.coinType === base.coinType).reduce((s, g) => s + g.allocations.reduce((t, a) => t + parseUnits(a.delta, g.decimals), 0n), 0n);
   return computeSpendable({
     coinType: base.coinType,
@@ -124,6 +134,7 @@ export async function spendableFor(provider: SuiTatumProvider, wallet: string, r
     gas: estimateGas(base.history.activity),
     settings: mem.settings,
     price: prices.get(base.coinType) ?? null,
+    otherStablecoinsValueE8: otherStablecoinsValue(holdings, prices, base.coinType),
   });
 }
 
@@ -149,22 +160,7 @@ export async function assessTransferRequest(provider: SuiTatumProvider, wallet: 
 
   const coinTypes = [...new Set([...base.balances.keys(), base.coinType, ...base.registry.map((r) => r.coinType)])];
   const prices = await priceMap(base.network, coinTypes, mem.settings);
-  const metadata = new Map<string, { symbol: string | null; decimals: number | null }>();
-  for (const c of [...base.balances.keys()]) {
-    try {
-      const m = await provider.getCoinMetadata(c);
-      metadata.set(c, { symbol: m.symbol, decimals: m.decimals });
-    } catch {
-      metadata.set(c, { symbol: null, decimals: null });
-    }
-  }
-  const holdings: EngineHolding[] = [...base.balances.entries()].map(([c, bal]) => ({
-    coinType: c,
-    symbol: metadata.get(c)?.symbol ?? null,
-    decimals: metadata.get(c)?.decimals ?? null,
-    assetClass: classifyAsset(base.network, c).assetClass,
-    rawBalance: bal,
-  }));
+  const holdings = await holdingsFor(provider, base.network, base.balances);
   const defaultBuyAssets: Partial<Record<AllocationClass, BuyAsset>> = {};
   for (const r of base.registry) if (r.assetClass !== "other" && !defaultBuyAssets[r.assetClass]) defaultBuyAssets[r.assetClass] = { coinType: r.coinType, symbol: r.symbol, decimals: r.decimals };
 
