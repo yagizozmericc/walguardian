@@ -6,8 +6,9 @@ import { PageContainer, PageHeader, Panel } from "@/components/common/page";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/common/states";
 import { usePostResource } from "@/components/common/use-post-resource";
 import { useWatchAddress } from "@/components/providers/watch-context";
-import { temporaryGoalStore } from "@/components/savings/temporary-goal-store";
-import { useGoals } from "@/components/savings/use-savings";
+import { MemoryBanner } from "@/components/memory/memory-banner";
+import { useMemoryGoals, useMemoryStrategy, usePostMemory } from "@/components/memory/use-memory";
+import { useApiResource } from "@/components/common/use-api-resource";
 import { formatRelative } from "@/lib/format";
 import { formatUnits } from "@/lib/units";
 import { knownAssets } from "@/modules/portfolio/assets";
@@ -17,12 +18,19 @@ import { AllocationPanel } from "./allocation-panel";
 import { ReferencePricesPanel, type PriceRow } from "./reference-prices-panel";
 import { ScenarioPanel } from "./scenario-panel";
 import { TargetsPanel } from "./targets-panel";
-import { STRATEGY_PERSISTENCE, useStrategySettings } from "./temporary-strategy-store";
+import { defaultStrategySettings, describeScenario } from "@/modules/strategy/strategy.defaults";
+import type { Decision } from "@/modules/memory/memory.repositories";
 
 export function StrategyView() {
   const { address } = useWatchAddress();
-  const { settings, save } = useStrategySettings(address);
-  const { goals } = useGoals(temporaryGoalStore, address);
+  const strategy = useMemoryStrategy(address);
+  const strategyResponse = strategy.state.status === "ready" ? strategy.state.data : null;
+  const settings = useMemo(() => strategyResponse?.settings ?? defaultStrategySettings(), [strategyResponse]);
+  const save = (next: typeof settings) => strategy.save(next);
+  const goalsMemory = useMemoryGoals(address);
+  const goals = useMemo(() => (goalsMemory.state.status === "ready" ? goalsMemory.state.data.items : []), [goalsMemory.state]);
+  const decisions = useApiResource<{ items: (Decision & { memoryId: string; createdAt: string })[] }>(address ? `/api/memory/decisions?address=${address}` : null);
+  const decide = usePostMemory<{ address: string; decision: Decision }>("/api/memory/decisions");
 
   // Savings earmarks are passed as a constraint: those funds are never sold in scenarios.
   const earmarks = useMemo(() => {
@@ -36,7 +44,8 @@ export function StrategyView() {
 
   const { state, refresh } = usePostResource<StrategyEvaluation>(
     "/api/strategy/evaluate",
-    address ? { address, settings, earmarks } : null,
+    // Wait for stored preferences before evaluating, so results never flash defaults.
+    address && strategy.state.status !== "loading" && strategy.state.status !== "idle" ? { address, settings, earmarks } : null,
   );
   const evaluation = state.status === "ready" ? state.data : null;
 
@@ -83,11 +92,18 @@ export function StrategyView() {
           <span className="font-medium text-warning">Reference prices are your assumptions.</span>{" "}
           <span className="text-muted-foreground">Testnet assets have no market price; every value and percentage below is computed from prices you enter.</span>
         </p>
-        <p>
-          <span className="font-medium text-warning">{STRATEGY_PERSISTENCE.label}.</span>{" "}
-          <span className="text-muted-foreground">{STRATEGY_PERSISTENCE.detail}</span>
-        </p>
       </div>
+      <MemoryBanner className="-mt-3 mb-6" provider={strategyResponse?.provider ?? null} what="Preferences, reference prices and targets" />
+      {strategy.state.status === "error" && (
+        <Panel className="mb-6">
+          <ErrorState error={strategy.state.error} onRetry={strategy.refresh} />
+        </Panel>
+      )}
+      {(strategy.mutationError ?? decide.error) && (
+        <Panel className="mb-6">
+          <ErrorState error={(strategy.mutationError ?? decide.error)!} />
+        </Panel>
+      )}
 
       {state.status === "error" && (
         <Panel className="mb-6">
@@ -134,7 +150,20 @@ export function StrategyView() {
             </Panel>
           )}
 
-          {evaluation?.scenario && <ScenarioPanel scenario={evaluation.scenario} />}
+          {evaluation?.scenario && (
+            <ScenarioPanel
+              scenario={evaluation.scenario}
+              pastDecisions={(decisions.state.status === "ready" ? decisions.state.data.items : []).filter((d) => d.scenario === describeScenario(evaluation.scenario!))}
+              deciding={decide.pending}
+              onDecide={async (decision, reason) => {
+                const ok = await decide.post({
+                  address: address!,
+                  decision: { decision, reason: reason || null, scenario: describeScenario(evaluation.scenario!), targets: settings.targets },
+                });
+                if (ok) decisions.refresh();
+              }}
+            />
+          )}
 
           {evaluation && (
             <ReferencePricesPanel key={`${address}:${settings.updatedAt}`} rows={priceRows} settings={settings} onSave={save} />

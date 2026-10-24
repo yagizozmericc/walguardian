@@ -124,7 +124,7 @@ export function GoalDetail({
             size="icon-sm"
             aria-label="Delete goal"
             onClick={() => {
-              if (window.confirm(`Delete "${goal.name}"? This removes it from temporary storage.`)) onDelete();
+              if (window.confirm(`Delete "${goal.name}"? A deletion record is saved to memory. Earlier records cannot be erased and remain until they expire.`)) onDelete();
             }}
           >
             <Trash2 />

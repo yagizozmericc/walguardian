@@ -5,6 +5,7 @@ import { RefreshCw } from "lucide-react";
 import { PageContainer, PageHeader, Panel } from "@/components/common/page";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/common/states";
 import { useApiResource } from "@/components/common/use-api-resource";
+import { usePostMemory } from "@/components/memory/use-memory";
 import { useWatchAddress } from "@/components/providers/watch-context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +26,7 @@ export function SecurityView() {
   const [filter, setFilter] = useState<"flagged" | "all">("flagged");
   const [selected, setSelected] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE);
+  const feedback = usePostMemory<{ address: string; digest: string; verdict: string; note: string | null }>("/api/memory/feedback");
 
   const report = state.status === "ready" ? state.data : null;
   const flagged = useMemo(() => report?.assessed.filter((a) => a.assessment.score > 0) ?? [], [report]);
@@ -104,6 +106,11 @@ export function SecurityView() {
       {report && (
         <div className="space-y-6">
           <StatusBand report={report} />
+          {feedback.error && (
+            <Panel>
+              <ErrorState error={feedback.error} />
+            </Panel>
+          )}
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
             <Panel
@@ -156,7 +163,17 @@ export function SecurityView() {
 
             <Panel title="Assessment" className="scroll-mt-4 lg:sticky lg:top-6 lg:self-start" id="assessment-detail">
               {current ? (
-                <AssessmentDetail item={current} network={report.network} />
+                <AssessmentDetail
+                  key={current.digest}
+                  item={current}
+                  network={report.network}
+                  memory={report.memory}
+                  saving={feedback.pending}
+                  onFeedback={async (verdict, note) => {
+                    const ok = await feedback.post({ address: address!, digest: current.digest, verdict, note: note || null });
+                    if (ok) refresh();
+                  }}
+                />
               ) : (
                 <EmptyState title="Nothing selected" description="Select a transaction to see its score breakdown." />
               )}
@@ -180,7 +197,7 @@ export function SecurityView() {
 }
 
 function StatusBand({ report }: { report: SecurityReport }) {
-  const c = report.severityCounts;
+  const c = report.openCounts;
   const b = report.baseline;
   return (
     <section className="rounded-lg border border-border bg-surface">
@@ -217,6 +234,16 @@ function StatusBand({ report }: { report: SecurityReport }) {
           </span>
         )}
         <span>Historical analysis · manual refresh</span>
+        <span className={report.memory.status === "unavailable" ? "text-warning" : undefined} title={report.memory.detail}>
+          Memory:{" "}
+          {report.memory.status === "applied"
+            ? `${report.memory.feedbackCount} review(s) applied${report.memory.provider === "mock" ? " (mock, not Walrus)" : ""}`
+            : report.memory.status === "no_session"
+              ? "no reviews yet"
+              : report.memory.status === "unavailable"
+                ? "unavailable, reviews not applied"
+                : "not configured"}
+        </span>
       </div>
     </section>
   );

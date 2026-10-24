@@ -1,4 +1,4 @@
-export type IntegrationState = "connected" | "configured" | "not_configured" | "error";
+export type IntegrationState = "connected" | "configured" | "not_configured" | "error" | "mock";
 
 export interface IntegrationStatusItem {
   id: "tatum" | "walrus" | "llm";

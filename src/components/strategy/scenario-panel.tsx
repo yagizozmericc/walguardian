@@ -1,13 +1,51 @@
+"use client";
+
+import { useState } from "react";
+import { History } from "lucide-react";
 import { Panel } from "@/components/common/page";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatAmount } from "@/lib/format";
 import type { RebalanceScenario } from "@/modules/strategy/strategy.types";
 
 const CLASS_LABEL = { native: "SUI", stablecoin: "Stablecoins", other: "Other assets" } as const;
 
-export function ScenarioPanel({ scenario }: { scenario: RebalanceScenario }) {
+export interface PastDecision {
+  decision: "accepted" | "rejected";
+  reason: string | null;
+  createdAt: string;
+  memoryId: string;
+}
+
+export function ScenarioPanel({
+  scenario,
+  pastDecisions = [],
+  deciding = false,
+  onDecide,
+}: {
+  scenario: RebalanceScenario;
+  pastDecisions?: PastDecision[];
+  deciding?: boolean;
+  onDecide?: (decision: "accepted" | "rejected", reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
   return (
     <Panel title="Rebalancing scenario" meta="Illustrative · not executed · not a recommendation">
+      {pastDecisions.length > 0 && (
+        <div className="flex gap-2.5 border-b border-border bg-muted/30 px-4 py-3">
+          <History className="mt-0.5 size-3.5 shrink-0 text-subtle" strokeWidth={1.75} aria-hidden />
+          <div className="space-y-1 text-[13px]">
+            <div className="font-medium">From your memory</div>
+            {pastDecisions.slice(0, 3).map((d) => (
+              <p key={d.memoryId} className="text-muted-foreground">
+                You {d.decision} this kind of change on {d.createdAt.slice(0, 10)}
+                {d.reason ? <>: &ldquo;{d.reason}&rdquo;</> : "."}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
       {scenario.trades.length === 0 ? (
         <p className="px-4 py-4 text-[13px] text-muted-foreground">The current allocation already matches your targets; no changes are needed.</p>
       ) : (
@@ -36,6 +74,29 @@ export function ScenarioPanel({ scenario }: { scenario: RebalanceScenario }) {
             ))}
           </TableBody>
         </Table>
+      )}
+
+      {onDecide && scenario.trades.length > 0 && (
+        <form
+          className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3"
+          onSubmit={(e) => e.preventDefault()}
+        >
+          <span className="text-xs text-subtle">Record your decision</span>
+          <Input
+            aria-label="Reason (optional)"
+            placeholder="Reason (optional, no personal data)"
+            className="h-8 max-w-xs flex-1 text-[13px]"
+            maxLength={300}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <Button type="button" size="sm" variant="outline" disabled={deciding} onClick={() => { onDecide("accepted", reason.trim()); setReason(""); }}>
+            Accept
+          </Button>
+          <Button type="button" size="sm" variant="outline" disabled={deciding} onClick={() => { onDecide("rejected", reason.trim()); setReason(""); }}>
+            Reject
+          </Button>
+        </form>
       )}
 
       <div className="grid gap-4 border-t border-border px-4 py-4 md:grid-cols-2">

@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { formatTimestamp, suiscanTxUrl } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AssessedTransaction, Evidence } from "@/modules/security/security.types";
+import type { AssessedTransaction, Evidence, SecurityReport } from "@/modules/security/security.types";
 import { CONFIDENCE_LABEL, SEVERITY_LABEL, SEVERITY_TEXT } from "./labels";
 
 function EvidenceRow({ e, network }: { e: Evidence; network: string }) {
@@ -34,8 +36,29 @@ function EvidenceRow({ e, network }: { e: Evidence; network: string }) {
   );
 }
 
-export function AssessmentDetail({ item, network }: { item: AssessedTransaction; network: string }) {
+const VERDICTS = [
+  ["expected", "Expected activity"],
+  ["suspicious", "Suspicious"],
+  ["unsure", "Not sure"],
+] as const;
+const VERDICT_TEXT = { expected: "Expected activity", suspicious: "Suspicious", unsure: "Not sure" } as const;
+
+export function AssessmentDetail({
+  item,
+  network,
+  memory,
+  onFeedback,
+  saving = false,
+}: {
+  item: AssessedTransaction;
+  network: string;
+  memory: SecurityReport["memory"];
+  onFeedback?: (verdict: "expected" | "suspicious" | "unsure", note: string) => void;
+  saving?: boolean;
+}) {
   const a = item.assessment;
+  const [note, setNote] = useState("");
+  const memoryUsable = memory.status !== "not_configured" && memory.status !== "unavailable";
   return (
     <div className="divide-y divide-border">
       <div className="space-y-3 px-4 py-4">
@@ -123,19 +146,55 @@ export function AssessmentDetail({ item, network }: { item: AssessedTransaction;
         </section>
       )}
 
-      <section className="space-y-2 px-4 py-4">
+      <section className="space-y-2.5 px-4 py-4">
         <h3 className="label-caps">Your assessment</h3>
-        <div className="flex flex-wrap gap-2">
-          {["Expected activity", "Suspicious", "Not sure"].map((label) => (
-            <Button key={label} variant="outline" size="sm" disabled>
-              {label}
-            </Button>
-          ))}
-        </div>
-        <p className="text-xs text-subtle">
-          Feedback is stored in Walrus Memory and used in later assessments. It is disabled until the Walrus Memory
-          integration is connected.
-        </p>
+        {item.review && (
+          <div className="rounded-md border border-border px-3 py-2 text-[13px]">
+            <div>
+              <span className="font-medium">{VERDICT_TEXT[item.review.verdict]}</span>
+              <span className="text-xs text-subtle"> · saved {item.review.createdAt.slice(0, 10)} · memory {item.review.memoryId.slice(0, 8)}</span>
+            </div>
+            {item.review.note && <p className="mt-1 text-muted-foreground">&ldquo;{item.review.note}&rdquo;</p>}
+            {item.review.remainsFlagged && (
+              <p className="mt-1.5 text-xs text-critical">This transaction has a critical signal. It remains flagged regardless of your feedback.</p>
+            )}
+          </div>
+        )}
+        {memoryUsable && onFeedback ? (
+          <>
+            <Textarea
+              aria-label="Explain your decision (optional)"
+              placeholder="Explain your decision (optional, no personal data)"
+              rows={2}
+              maxLength={500}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="text-[13px]"
+            />
+            <div className="flex flex-wrap gap-2">
+              {VERDICTS.map(([v, label]) => (
+                <Button
+                  key={v}
+                  variant={item.review?.verdict === v ? "secondary" : "outline"}
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => {
+                    onFeedback(v, note.trim());
+                    setNote("");
+                  }}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-subtle">
+              Saved to {memory.provider === "mock" ? "development mock memory (not Walrus)" : "Walrus Memory"}. It personalizes later assessments
+              (known or flagged recipients) but never clears a critical signal.
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-subtle">Feedback cannot be saved: {memory.detail}</p>
+        )}
       </section>
     </div>
   );

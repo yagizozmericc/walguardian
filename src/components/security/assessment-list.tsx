@@ -66,7 +66,13 @@ export function AssessmentList({
                 {a.recipients[0] ? shortAddress(a.recipients[0]) : a.moveCalls[0] ? `${a.moveCalls[0].module}::${a.moveCalls[0].function}` : "—"}
                 {a.recipients.length > 1 && <span className="text-subtle"> +{a.recipients.length - 1}</span>}
               </TableCell>
-              <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
+              <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
+                {a.review && (
+                  <span className={cn("mr-1.5", a.review.remainsFlagged ? "text-critical" : "text-foreground")}>
+                    {a.review.verdict === "expected" ? "Reviewed: expected" : a.review.verdict === "suspicious" ? "Reviewed: suspicious" : "Reviewed: unsure"}
+                    {a.review.remainsFlagged ? " (still flagged)" : ""} ·
+                  </span>
+                )}
                 {signals.length === 0 ? (
                   <span className="text-subtle">—</span>
                 ) : (

@@ -4,6 +4,20 @@ import { AppError, toApiError } from "@/lib/errors";
 import { newRequestId } from "@/lib/http";
 import { getSuiProvider } from "@/modules/blockchain/sui.adapter";
 import type { IntegrationStatusItem, IntegrationStatusResponse } from "@/lib/status-types";
+import { getMemoryClient, memoryProviderInfo } from "@/modules/memory/memory.factory";
+
+async function memoryStatus(): Promise<IntegrationStatusItem> {
+  const base = { id: "walrus" as const, label: "Walrus Memory", checkedAt: new Date().toISOString() };
+  const info = memoryProviderInfo();
+  if (info.provider === "disabled") return { ...base, state: "not_configured", detail: info.detail };
+  if (info.provider === "mock") return { ...base, state: "mock", detail: `${info.label}: ${info.detail}` };
+  try {
+    const h = await getMemoryClient().health();
+    return { ...base, state: h.status === "ok" ? "connected" : "error", detail: `${info.label}: ${h.detail}` };
+  } catch (err) {
+    return { ...base, state: "error", detail: err instanceof AppError ? err.message : "Health check failed." };
+  }
+}
 
 async function tatumStatus(): Promise<IntegrationStatusItem> {
   const e = env();
@@ -29,13 +43,7 @@ export async function GET() {
     const checkedAt = new Date().toISOString();
     const integrations: IntegrationStatusItem[] = [
       await tatumStatus(),
-      {
-        id: "walrus",
-        label: "Walrus Memory",
-        state: "not_configured",
-        detail: "Memory integration is not implemented yet (Phase 6).",
-        checkedAt,
-      },
+      await memoryStatus(),
       {
         id: "llm",
         label: "AI model",

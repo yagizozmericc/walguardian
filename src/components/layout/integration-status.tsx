@@ -9,6 +9,7 @@ const DOT: Record<IntegrationState, string> = {
   configured: "bg-subtle",
   not_configured: "bg-subtle/50",
   error: "bg-critical",
+  mock: "bg-warning",
 };
 
 const LABEL: Record<IntegrationState, string> = {
@@ -16,6 +17,7 @@ const LABEL: Record<IntegrationState, string> = {
   configured: "Ready",
   not_configured: "Not set",
   error: "Error",
+  mock: "Mock",
 };
 
 /** Live integration status: every row is a real server-side check. */

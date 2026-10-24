@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { PageContainer, PageHeader, Panel } from "@/components/common/page";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/common/states";
 import { useApiResource } from "@/components/common/use-api-resource";
 import { useWatchAddress } from "@/components/providers/watch-context";
 import { Button } from "@/components/ui/button";
@@ -16,15 +16,26 @@ import type { GoalEvaluation, SavingsEvaluation, SavingsGoal } from "@/modules/s
 import { GoalDetail } from "./goal-detail";
 import { GoalFormSheet, type GoalAsset } from "./goal-form";
 import { SCHEDULE_LABEL, SCHEDULE_TEXT } from "./labels";
-import { temporaryGoalStore } from "./temporary-goal-store";
-import { useGoals, useSavingsEvaluation } from "./use-savings";
-
-const repo = temporaryGoalStore;
+import { MemoryBanner, memoryNotices } from "@/components/memory/memory-banner";
+import { useMemoryGoals } from "@/components/memory/use-memory";
+import { useSavingsEvaluation } from "./use-savings";
 
 export function SavingsView() {
   const { address } = useWatchAddress();
   const portfolio = useApiResource<PortfolioSnapshot>(address ? `/api/portfolio/${address}?limit=1` : null);
-  const { goals, save, remove } = useGoals(repo, address);
+  const memory = useMemoryGoals(address);
+  const goalsResponse = memory.state.status === "ready" ? memory.state.data : null;
+  const goals: SavingsGoal[] = useMemo(
+    () => (goalsResponse?.items ?? []).map((g) => {
+      const goal: SavingsGoal & { memory?: unknown } = { ...g };
+      delete goal.memory;
+      return goal;
+    }),
+    [goalsResponse],
+  );
+  const canSave = goalsResponse !== null && goalsResponse.provider.provider !== "disabled";
+  const save = (g: SavingsGoal) => memory.save(g);
+  const remove = (id: string) => memory.remove(id);
   const { state: evalState } = useSavingsEvaluation(address, goals);
   const [selected, setSelected] = useState<string | null>(null);
   const [form, setForm] = useState<{ open: boolean; goal: SavingsGoal | null; key: number }>({ open: false, goal: null, key: 0 });
@@ -78,7 +89,7 @@ export function SavingsView() {
                 Checked against Tatum · {formatRelative(evaluation.source.fetchedAt)}
               </span>
             )}
-            <Button size="sm" onClick={() => openForm(null)} disabled={portfolio.state.status === "loading"}>
+            <Button size="sm" onClick={() => openForm(null)} disabled={portfolio.state.status === "loading" || !canSave}>
               <Plus />
               New goal
             </Button>
@@ -86,10 +97,18 @@ export function SavingsView() {
         }
       />
 
-      <div className="mb-6 rounded-lg border border-warning/30 bg-warning-muted px-4 py-3 text-[13px]">
-        <span className="font-medium text-warning">{repo.persistence.label}.</span>{" "}
-        <span className="text-muted-foreground">{repo.persistence.detail}</span>
-      </div>
+      <MemoryBanner className="mb-6" provider={goalsResponse?.provider ?? null} what="Goals" notices={goalsResponse ? memoryNotices(goalsResponse) : []} />
+
+      {memory.state.status === "error" && (
+        <Panel className="mb-6">
+          <ErrorState error={memory.state.error} onRetry={memory.refresh} />
+        </Panel>
+      )}
+      {memory.mutationError && (
+        <Panel className="mb-6">
+          <ErrorState error={memory.mutationError} />
+        </Panel>
+      )}
 
       {portfolio.state.status === "error" && (
         <Panel className="mb-6">
@@ -97,13 +116,17 @@ export function SavingsView() {
         </Panel>
       )}
 
-      {goals.length === 0 ? (
+      {memory.state.status === "loading" ? (
+        <Panel>
+          <TableSkeleton rows={3} cols={4} />
+        </Panel>
+      ) : goals.length === 0 ? (
         <Panel>
           <EmptyState
             title="No savings goals yet"
             description="Create a savings target (for example 2,000 USDC by a date) or a reserve (a minimum you want kept aside). Then earmark funds from this wallet toward it."
             action={
-              <Button size="sm" onClick={() => openForm(null)}>
+              <Button size="sm" onClick={() => openForm(null)} disabled={!canSave}>
                 <Plus />
                 New goal
               </Button>

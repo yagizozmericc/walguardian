@@ -210,3 +210,14 @@ describe("determinism", () => {
     expect(evaluateAllocation(input())).toEqual(evaluateAllocation(input()));
   });
 });
+
+import { describeScenario } from "@/modules/strategy/strategy.defaults";
+
+describe("describeScenario", () => {
+  it("describes direction independent of amounts, for matching past decisions", () => {
+    const r = evaluateAllocation(input());
+    expect(describeScenario(r.scenario!)).toBe("reduce other assets; increase SUI, stablecoins");
+    const r2 = evaluateAllocation(input({ settings: settings({ targets: { native: "39", stablecoin: "41", other: "20" } }) }));
+    expect(describeScenario(r2.scenario!)).toBe(describeScenario(r.scenario!));
+  });
+});
