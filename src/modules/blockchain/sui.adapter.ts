@@ -2,6 +2,7 @@ import "server-only";
 import { SUI_DECIMALS } from "@mysten/sui/utils";
 import { ConfigError, ProviderError } from "@/lib/errors";
 import { env, type SuiNetwork } from "@/lib/env";
+import { getKv } from "@/lib/kv";
 import { SUI_COIN_TYPE, normalizeCoinType } from "@/modules/portfolio/assets";
 import type {
   BlockchainProvider,
@@ -23,6 +24,7 @@ import {
   normalizeServiceInfo,
 } from "./sui.normalize";
 import { TatumGrpcClient } from "./tatum.client";
+import { SharedRequestBudget } from "./tatum.budget";
 
 const TX_READ_MASK = {
   paths: [
@@ -174,6 +176,6 @@ export function getSuiProvider(): SuiTatumProvider {
   if (!e.tatum.apiKey) {
     throw new ConfigError("Tatum is not configured. Set TATUM_API_KEY (a Sui Testnet key) in .env.local.", "CONFIG_MISSING");
   }
-  provider = new SuiTatumProvider(new TatumGrpcClient(e.tatum.grpcEndpoint, e.tatum.apiKey, e.tatum.maxRequestsPerSecond), e.network);
+  provider = new SuiTatumProvider(new TatumGrpcClient(e.tatum.grpcEndpoint, e.tatum.apiKey, e.tatum.maxRequestsPerSecond, new SharedRequestBudget(getKv, e.tatum.maxRequestsPerSecond)), e.network);
   return provider;
 }

@@ -4,6 +4,7 @@ import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 import { ProviderError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import type { RequestBudget } from "./tatum.budget";
 
 /**
  * Low-level transport for Tatum's Sui gRPC gateway.
@@ -112,6 +113,7 @@ export class TatumGrpcClient {
     readonly endpoint: string,
     private readonly apiKey: string,
     maxRequestsPerSecond = 3,
+    private readonly budget: RequestBudget | null = null,
   ) {
     this.spacer = new RequestSpacer(maxRequestsPerSecond);
     const { LedgerService, StateService } = loadServices();
@@ -139,6 +141,7 @@ export class TatumGrpcClient {
 
     for (let attempt = 0; ; attempt++) {
       await this.spacer.acquire();
+      await this.budget?.acquire();
       try {
         return await new Promise<T>((resolve, reject) => {
           fn.call(client, request, this.metadata(), { deadline: Date.now() + DEFAULT_DEADLINE_MS }, (err, res) =>
@@ -163,6 +166,7 @@ export class TatumGrpcClient {
     for (let attempt = 0; ; attempt++) {
       const frames: T[] = [];
       await this.spacer.acquire();
+      await this.budget?.acquire();
       try {
         await new Promise<void>((resolve, reject) => {
           const call = fn.call(client, request, this.metadata(), { deadline: Date.now() + STREAM_DEADLINE_MS });
