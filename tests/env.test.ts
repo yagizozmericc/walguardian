@@ -68,6 +68,36 @@ describe("parseEnv", () => {
     it("requires credentials for walrus", () => {
       expect(() => parseEnv({ MEMORY_PROVIDER: "walrus", SESSION_SECRET: secret })).toThrow(/requires/);
     });
+    it("keeps Walrus read-only and structured-only unless writes are enabled explicitly", () => {
+      const walrus = { MEMORY_PROVIDER: "walrus", SESSION_SECRET: secret, MEMWAL_PRIVATE_KEY: "k", MEMWAL_ACCOUNT_ID: "0x1", MEMWAL_SERVER_URL: "https://relayer.memory.walrus.xyz", ALLOW_WALRUS_MAINNET: "true" };
+      expect(parseEnv(walrus).memory).toMatchObject({ writes: { enabled: false, structuredOnly: true, perSessionDay: 20, globalDay: 300 } });
+      expect(parseEnv({ ...walrus, MEMORY_WRITES_ENABLED: "true" }).memory).toMatchObject({ writes: { enabled: true, structuredOnly: true } });
+      expect(parseEnv({ MEMORY_PROVIDER: "mock", SESSION_SECRET: secret }).memory).toMatchObject({ writes: { enabled: true, structuredOnly: false } });
+    });
+    it("disables the file-based mock on Vercel instead of losing records silently", () => {
+      const m = parseEnv({ MEMORY_PROVIDER: "mock", SESSION_SECRET: secret, VERCEL: "1", VERCEL_ENV: "preview" }).memory;
+      expect(m).toMatchObject({ provider: "disabled" });
+      expect(m.provider === "disabled" && m.reason).toMatch(/cannot persist records on Vercel/);
+    });
+  });
+
+  describe("deployment and Redis", () => {
+    const kv = { KV_REST_API_URL: "https://example.upstash.io", KV_REST_API_TOKEN: "t" };
+    it("separates key prefixes per deployment environment", () => {
+      expect(parseEnv(kv).redis?.prefix).toBe("wg:local:");
+      expect(parseEnv({ ...kv, VERCEL: "1", VERCEL_ENV: "preview" }).redis?.prefix).toBe("wg:preview:");
+      expect(parseEnv({ ...kv, VERCEL: "1", VERCEL_ENV: "production" }).redis?.prefix).toBe("wg:production:");
+      expect(parseEnv({ ...kv, VERCEL: "1", VERCEL_ENV: "production" }).deployment).toEqual({ vercel: true, environment: "production" });
+    });
+    it("is optional, but both REST variables must be set together and use https", () => {
+      expect(parseEnv({}).redis).toBeNull();
+      expect(() => parseEnv({ KV_REST_API_URL: kv.KV_REST_API_URL })).toThrow(/set together/);
+      expect(() => parseEnv({ ...kv, KV_REST_API_URL: "http://example.upstash.io" })).toThrow(ConfigError);
+    });
+    it("reads API budgets with defaults", () => {
+      expect(parseEnv({}).limits).toEqual({ apiPerMinute: 30, apiPerDay: 2000 });
+      expect(parseEnv({ API_RATE_PER_MINUTE: "10", API_RATE_PER_DAY: "50" }).limits).toEqual({ apiPerMinute: 10, apiPerDay: 50 });
+    });
   });
 
   describe("llm configuration", () => {

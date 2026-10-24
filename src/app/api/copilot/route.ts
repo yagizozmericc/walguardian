@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { headers } from "next/headers";
 import { ValidationError } from "@/lib/errors";
 import { handle } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/request-guard";
@@ -17,9 +15,6 @@ export async function POST(req: Request) {
     const address = SuiAddressSchema.safeParse(parsed.data.address);
     if (!address.success) throw new ValidationError("A valid Sui address is required.");
     const memory = memoryProviderInfo().provider === "disabled" ? null : await memoryForRequest({ create: false });
-    const h = await headers();
-    const client = memory ? `session:${memory.namespace("reasoning")}` : `ip:${h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local"}`;
-    const rateKey = createHash("sha256").update(client).digest("hex").slice(0, 24);
-    return answerQuestion({ address: address.data, question: parsed.data.question, history: parsed.data.history, memory, rateKey });
+    return answerQuestion({ address: address.data, question: parsed.data.question, history: parsed.data.history, memory });
   });
 }

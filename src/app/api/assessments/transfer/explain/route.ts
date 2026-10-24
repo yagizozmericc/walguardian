@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { headers } from "next/headers";
 import { ValidationError } from "@/lib/errors";
 import { handle } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/request-guard";
@@ -22,13 +20,10 @@ export async function POST(req: Request) {
     if (!wallet.success) throw new ValidationError("A valid wallet address is required.");
     const memory = memoryProviderInfo().provider === "disabled" ? null : await memoryForRequest({ create: false });
     const assessment = await assessTransferRequest(getSuiProvider(), wallet.data, parsed.data, memory);
-    const h = await headers();
-    const client = memory ? `session:${memory.namespace("reasoning")}` : `ip:${h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local"}`;
     return explainWithContext({
       ctx: transferContext(assessment),
       question: "Explain this simulated transfer assessment: what are the confirmed facts, historical patterns, my own preferences or past decisions, and the unknowns? What should I check before sending?",
       history: [],
-      rateKey: createHash("sha256").update(client).digest("hex").slice(0, 24),
       extraSystem: TRANSFER_EXPLAIN_SYSTEM,
     });
   });

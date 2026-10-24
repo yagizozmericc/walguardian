@@ -23,23 +23,16 @@ import { deterministicSummary } from "./fallback";
 import { GeminiProvider } from "./gemini.provider";
 import type { LlmProvider } from "./llm.provider";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt.templates";
-import { CopilotRateLimiter } from "./rate-limit";
 import { validateAnswer } from "./response.validator";
+import { clientRules, limit } from "@/lib/request-guard";
 
 let llm: LlmProvider | null = null;
-let limiter: CopilotRateLimiter | null = null;
 
 export function getLlm(): LlmProvider | null {
   const cfg = env().llm;
   if (cfg.provider === "disabled") return null;
   llm ??= new GeminiProvider(cfg.apiKey, cfg.model);
   return llm;
-}
-
-function getLimiter(): CopilotRateLimiter {
-  const cfg = env().llm;
-  limiter ??= new CopilotRateLimiter(cfg.provider === "gemini" ? cfg.ratePerMinute : 6, cfg.provider === "gemini" ? cfg.ratePerDay : 100);
-  return limiter;
 }
 
 const errText = (err: unknown) => (err instanceof AppError ? err.message : "unexpected error");
@@ -101,7 +94,6 @@ export async function explainWithContext(opts: {
   ctx: AgentContext;
   question: string;
   history: { role: "user" | "assistant"; text: string }[];
-  rateKey: string;
   extraSystem?: string;
 }): Promise<CopilotResponse> {
   const { ctx } = opts;
@@ -113,10 +105,11 @@ export async function explainWithContext(opts: {
 
   const model = getLlm();
   if (!model) return fallback("GEMINI_API_KEY is not configured");
-  const rate = getLimiter().check(opts.rateKey);
+  const cfg = env().llm;
+  // Gemini is only called under an enforced budget; if the shared limiter is down, answer deterministically.
+  const rate = await limit("copilot", await clientRules(cfg.provider === "gemini" ? cfg.ratePerMinute : 6, cfg.provider === "gemini" ? cfg.ratePerDay : 100), "deny");
   if (!rate.allowed) return fallback(`${rate.reason}; try again in ${rate.retryAfterS}s`);
 
-  const cfg = env().llm;
   try {
     const r = await model.generateJson({
       system: opts.extraSystem ? `${SYSTEM_PROMPT}\n\n${opts.extraSystem}` : SYSTEM_PROMPT,
@@ -140,8 +133,7 @@ export async function answerQuestion(opts: {
   question: string;
   history: { role: "user" | "assistant"; text: string }[];
   memory: MemoryService | null;
-  rateKey: string;
 }): Promise<CopilotResponse> {
   const ctx = buildContext(await gatherContext(opts.address, opts.question, opts.memory));
-  return explainWithContext({ ctx, question: opts.question, history: opts.history, rateKey: opts.rateKey });
+  return explainWithContext({ ctx, question: opts.question, history: opts.history });
 }

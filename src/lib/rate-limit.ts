@@ -1,29 +1,40 @@
-/** In-process sliding-window limiter (per key). Single-instance by design; see docs/DEPLOYMENT.md. */
-export class RateLimiter {
-  private readonly hits = new Map<string, number[]>();
+import type { KvStore } from "./kv";
 
-  constructor(
-    private readonly perMinute: number,
-    private readonly perDay: number,
-  ) {}
+/**
+ * Fixed-window counters (per minute and per UTC day) on a shared store, so
+ * every server instance enforces the same budget. A denied request still
+ * counts toward its window; windows reset at their boundary.
+ */
 
-  check(key: string, now = Date.now()): { allowed: true } | { allowed: false; reason: string; retryAfterS: number } {
-    const day = 86_400_000;
-    const list = (this.hits.get(key) ?? []).filter((t) => now - t < day);
-    const lastMinute = list.filter((t) => now - t < 60_000);
-    if (lastMinute.length >= this.perMinute) {
-      return { allowed: false, reason: `limit of ${this.perMinute} requests per minute reached`, retryAfterS: Math.ceil((60_000 - (now - lastMinute[0])) / 1000) };
+export interface LimitRule {
+  /** Identity the budget applies to, e.g. a hashed session or IP. */
+  id: string;
+  perMinute: number;
+  perDay: number;
+}
+
+export type LimitResult = { allowed: true } | { allowed: false; reason: string; retryAfterS: number };
+
+const MINUTE = 60_000;
+const DAY = 86_400_000;
+
+export async function consumeLimits(store: KvStore, bucket: string, rules: readonly LimitRule[], now = Date.now()): Promise<LimitResult> {
+  const minute = Math.floor(now / MINUTE);
+  const day = Math.floor(now / DAY);
+  const counts = await store.incr(
+    rules.flatMap((r) => [
+      { key: `rl:${bucket}:${r.id}:m:${minute}`, ttlS: 120 },
+      { key: `rl:${bucket}:${r.id}:d:${day}`, ttlS: 90_000 },
+    ]),
+  );
+  for (let i = 0; i < rules.length; i++) {
+    const r = rules[i];
+    if (counts[i * 2] > r.perMinute) {
+      return { allowed: false, reason: `limit of ${r.perMinute} requests per minute reached`, retryAfterS: Math.ceil(((minute + 1) * MINUTE - now) / 1000) };
     }
-    if (list.length >= this.perDay) {
-      return { allowed: false, reason: `daily limit of ${this.perDay} requests reached`, retryAfterS: Math.ceil((day - (now - list[0])) / 1000) };
+    if (counts[i * 2 + 1] > r.perDay) {
+      return { allowed: false, reason: `daily limit of ${r.perDay} requests reached`, retryAfterS: Math.ceil(((day + 1) * DAY - now) / 1000) };
     }
-    list.push(now);
-    this.hits.set(key, list);
-    if (this.hits.size > 10_000) this.prune(now);
-    return { allowed: true };
   }
-
-  private prune(now: number) {
-    for (const [k, v] of this.hits) if (v.every((t) => now - t >= 86_400_000)) this.hits.delete(k);
-  }
+  return { allowed: true };
 }

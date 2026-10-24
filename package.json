@@ -15,7 +15,8 @@
     "demo:protect": "tsx --conditions=react-server scripts/demo-protect.ts",
     "check:walrus": "tsx --conditions=react-server scripts/check-walrus.ts",
     "check:llm": "tsx --conditions=react-server scripts/check-llm.ts",
-    "og:image": "tsx scripts/generate-og-image.tsx"
+    "og:image": "tsx scripts/generate-og-image.tsx",
+    "test:integration": "vitest run --config vitest.integration.config.mts"
   },
   "dependencies": {
     "@google/genai": "^2.31.0",
@@ -23,6 +24,7 @@
     "@grpc/proto-loader": "^0.8.1",
     "@mysten-incubation/memwal": "^0.1.9",
     "@mysten/sui": "^2.37.0",
+    "@upstash/redis": "^1.39.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.0",
     "decimal.js": "^10.6.0",

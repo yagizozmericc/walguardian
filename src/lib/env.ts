@@ -30,6 +30,18 @@ const EnvSchema = z.object({
   LLM_MAX_OUTPUT_TOKENS: z.preprocess(emptyToUndefined, z.coerce.number().int().min(128).max(8192).default(1200)),
   COPILOT_RATE_PER_MINUTE: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(120).default(6)),
   COPILOT_RATE_PER_DAY: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(5000).default(100)),
+  API_RATE_PER_MINUTE: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(1000).default(30)),
+  API_RATE_PER_DAY: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(100_000).default(2000)),
+  // Upstash Redis (REST) for shared limits and short-lived caches. Never stores memory content.
+  KV_REST_API_URL: z.preprocess(emptyToUndefined, z.string().url().startsWith("https://", "must use https").optional()),
+  KV_REST_API_TOKEN: optionalString,
+  // Memory writes: the remote provider is read-only unless explicitly enabled.
+  MEMORY_WRITES_ENABLED: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).optional()),
+  MEMORY_WRITES_PER_SESSION_DAY: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(1000).default(20)),
+  MEMORY_WRITES_GLOBAL_DAY: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(100_000).default(300)),
+  // Injected by Vercel.
+  VERCEL: optionalString,
+  VERCEL_ENV: z.preprocess(emptyToUndefined, z.enum(["production", "preview", "development"]).optional()),
 });
 
 export type LlmConfig =
@@ -40,6 +52,18 @@ export type LlmConfig =
 export const WALRUS_TESTNET_RELAYER = "https://relayer-staging.memory.walrus.xyz";
 export const WALRUS_MAINNET_RELAYER = "https://relayer.memory.walrus.xyz";
 
+/**
+ * Write policy for the memory provider. The remote provider (Walrus) is
+ * read-only unless MEMORY_WRITES_ENABLED=true, accepts only predefined
+ * structured records (no free text), and requires shared quotas.
+ */
+export interface MemoryWriteConfig {
+  enabled: boolean;
+  structuredOnly: boolean;
+  perSessionDay: number;
+  globalDay: number;
+}
+
 export type MemoryConfig =
   | { provider: "disabled"; reason: string }
   | {
@@ -48,6 +72,7 @@ export type MemoryConfig =
       sessionSecret: string;
       file: string;
       ttlDays: number;
+      writes: MemoryWriteConfig;
     }
   | {
       provider: "walrus";
@@ -57,15 +82,22 @@ export type MemoryConfig =
       accountId: string;
       serverUrl: string;
       network: "testnet" | "mainnet" | "unknown";
+      writes: MemoryWriteConfig;
     };
 
 export type SuiNetwork = "testnet" | "mainnet";
+
+export type DeploymentEnvironment = "production" | "preview" | "development" | "local";
 
 export interface ServerEnv {
   network: SuiNetwork;
   tatum: { apiKey: string | undefined; grpcEndpoint: string; maxRequestsPerSecond: number };
   memory: MemoryConfig;
   llm: LlmConfig;
+  deployment: { vercel: boolean; environment: DeploymentEnvironment };
+  /** Upstash Redis REST credentials; `prefix` separates Preview, Production and local keys in one database. */
+  redis: { url: string; token: string; prefix: string } | null;
+  limits: { apiPerMinute: number; apiPerDay: number };
 }
 
 /**
@@ -99,10 +131,19 @@ export function parseEnv(source: Record<string, string | undefined>): ServerEnv 
     );
   }
 
+  const vercel = Boolean(e.VERCEL);
+  const environment: DeploymentEnvironment = vercel ? (e.VERCEL_ENV ?? "development") : "local";
+  if (Boolean(e.KV_REST_API_URL) !== Boolean(e.KV_REST_API_TOKEN)) {
+    throw new ConfigError("KV_REST_API_URL and KV_REST_API_TOKEN must be set together.", "CONFIG_MISSING");
+  }
+
   return {
     network: e.SUI_NETWORK,
     tatum: { apiKey: e.TATUM_API_KEY, grpcEndpoint, maxRequestsPerSecond: e.TATUM_MAX_RPS },
-    memory: parseMemoryConfig(e),
+    memory: parseMemoryConfig(e, vercel),
+    deployment: { vercel, environment },
+    redis: e.KV_REST_API_URL && e.KV_REST_API_TOKEN ? { url: e.KV_REST_API_URL, token: e.KV_REST_API_TOKEN, prefix: `wg:${environment}:` } : null,
+    limits: { apiPerMinute: e.API_RATE_PER_MINUTE, apiPerDay: e.API_RATE_PER_DAY },
     llm: e.GEMINI_API_KEY
       ? {
           provider: "gemini",
@@ -121,13 +162,18 @@ export function parseEnv(source: Record<string, string | undefined>): ServerEnv 
  * providers. The Walrus Mainnet relayer is refused unless ALLOW_WALRUS_MAINNET
  * is set (a separate switch from ALLOW_MAINNET, which governs Tatum).
  */
-function parseMemoryConfig(e: z.infer<typeof EnvSchema>): MemoryConfig {
+function parseMemoryConfig(e: z.infer<typeof EnvSchema>, vercel: boolean): MemoryConfig {
   if (!e.MEMORY_PROVIDER) {
     return { provider: "disabled", reason: "MEMORY_PROVIDER is not set. Set it to \"walrus\" or \"mock\"." };
+  }
+  if (e.MEMORY_PROVIDER === "mock" && vercel) {
+    // Vercel functions have no persistent, shared disk: the mock would silently lose records.
+    return { provider: "disabled", reason: "The development mock cannot persist records on Vercel, so memory is disabled here." };
   }
   if (!e.SESSION_SECRET || !/^[0-9a-fA-F]{64,}$/.test(e.SESSION_SECRET)) {
     throw new ConfigError("SESSION_SECRET must be at least 32 random bytes in hex when memory is enabled.");
   }
+  const quotas = { perSessionDay: e.MEMORY_WRITES_PER_SESSION_DAY, globalDay: e.MEMORY_WRITES_GLOBAL_DAY };
   if (e.MEMORY_PROVIDER === "mock") {
     return {
       provider: "mock",
@@ -135,6 +181,7 @@ function parseMemoryConfig(e: z.infer<typeof EnvSchema>): MemoryConfig {
       sessionSecret: e.SESSION_SECRET,
       file: e.MOCK_MEMORY_FILE,
       ttlDays: e.MOCK_MEMORY_TTL_DAYS,
+      writes: { enabled: true, structuredOnly: false, ...quotas },
     };
   }
   if (!e.MEMWAL_PRIVATE_KEY || !e.MEMWAL_ACCOUNT_ID || !e.MEMWAL_SERVER_URL) {
@@ -156,6 +203,7 @@ function parseMemoryConfig(e: z.infer<typeof EnvSchema>): MemoryConfig {
     accountId: e.MEMWAL_ACCOUNT_ID,
     serverUrl,
     network,
+    writes: { enabled: e.MEMORY_WRITES_ENABLED === "true", structuredOnly: true, ...quotas },
   };
 }
 
