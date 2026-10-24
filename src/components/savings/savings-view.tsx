@@ -142,7 +142,7 @@ export function SavingsView() {
           )}
           {evaluation && <CoverageBand evaluation={evaluation} />}
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
             <Panel title="Goals" meta={`${goals.length} goal${goals.length === 1 ? "" : "s"}`} className="self-start">
               <GoalTable goals={ordered} evalById={evalById} selected={current?.id ?? null} onSelect={select} />
             </Panel>

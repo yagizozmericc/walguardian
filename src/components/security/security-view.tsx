@@ -112,7 +112,7 @@ export function SecurityView() {
             </Panel>
           )}
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
             <Panel
               title="Assessed transactions"
               meta={`${report.assessed.length} sent by this address`}
