@@ -1,6 +1,28 @@
-# Walrus Memory: Mainnet relayer integration plan
+# Walrus Memory: integration plan
 
-**Status:** Prepared 2026-10-24. **No Mainnet writes have been made.** The only requests sent to the relayer so far are the unauthenticated `GET /health`, `/version`, and `/config`.
+## Current status (2026-10-24, latest)
+
+- **The application integration is implemented** (Phase 6) behind a provider-neutral client that mirrors the official SDK. It runs today on the **development mock** (`MEMORY_PROVIDER=mock`, the SDK's `MemWalMock` plus a local file). The mock is **not Walrus**.
+- **The Testnet relayer and dashboard** (`relayer-staging` and `staging.memory.walrus.xyz`) still serve a certificate for `*.up.railway.app`, so the SDK cannot connect. The docs list no other Testnet endpoint.
+- **Credentials.** The configured `MEMWAL_ACCOUNT_ID` was not found as an object on Testnet or on Mainnet (read-only lookups), and it is not an address with any activity. The delegate key has a valid format, but its registration cannot be confirmed.
+- **Owner decision.** Testnet first. Develop on the mock. No Mainnet, no blockchain transactions, no real memory writes.
+- **No memory writes and no transactions have been made** on any Walrus network.
+
+### Switching to a live relayer (when available)
+
+1. Create the account on the dashboard **for the chosen network**. The Testnet dashboard is separate from Mainnet.
+2. In `.env`, set:
+   - `MEMORY_PROVIDER=walrus`
+   - `MEMWAL_SERVER_URL` (the Testnet staging URL)
+   - `MEMWAL_ACCOUNT_ID` and `MEMWAL_PRIVATE_KEY` from that dashboard
+   - keep `SESSION_SECRET`
+3. Run `npm run check:walrus`. It is read-only: configuration, health, listing.
+4. With approval: `CONFIRM_WALRUS_TEST_WRITE=yes npm run check:walrus -- --write-test` (one synthetic record).
+5. A Mainnet relayer additionally needs `ALLOW_WALRUS_MAINNET=true` and explicit approval.
+
+---
+
+The sections below are the earlier research on the **Mainnet** relayer (2026-10-24). They remain accurate for reference. The only requests sent to any relayer were the unauthenticated `GET /health`, `/version`, and `/config`.
 
 **Authorization (from the project owner):**
 - The Walrus Memory **Mainnet hosted relayer** may be used for development and demos, with **non-sensitive synthetic data only**.

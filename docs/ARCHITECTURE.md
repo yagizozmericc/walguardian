@@ -479,6 +479,14 @@ Sensitive content must be protected according to Walrus's verified storage and a
 
 Do not assume that removing a database reference deletes immutable external data.
 
+### Implemented model (2026-10-24)
+
+- **Provider selection.** `MEMORY_PROVIDER` is `walrus` (official SDK, hosted relayer) or `mock` (the SDK's `MemWalMock` plus a local file, for development only). Unset disables memory. There is never a fallback between providers.
+- **One client interface.** Both providers implement `rememberAndWait`, `recall`, `listMemories`, and `health` (`modules/memory/memory.client.ts`), so switching is configuration only.
+- **Identity.** An anonymous signed session cookie holds a random principal, and namespaces follow the pattern `prefix-principal-category`. Every envelope carries a principal tag that is checked again when decoded.
+- **Supersession and deletion.** The newest record per `entityId` wins. Deletion writes a tombstone; earlier records remain until they expire.
+- **How memory feeds the engines.** Memory provides inputs (reviews, preferences, goals, decisions). The deterministic engines stay pure, and Protect applies reviews only to later transactions. Critical signals are computed independently of feedback.
+
 ## 11. AI Orchestrator
 
 The AI Orchestrator combines deterministic calculations, blockchain data, and persistent memories.

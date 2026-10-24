@@ -1,7 +1,7 @@
 # Guardian AI — Implementation Plan
 
 **Last updated:** 2026-10-24
-**Status:** Phases 1–5 are complete. Savings and strategy settings run on labelled temporary stores until Walrus Memory is connected. The Walrus Mainnet integration is prepared (`docs/WALRUS_INTEGRATION.md`) and waits on owner account setup. See [Progress log](#9-progress-log).
+**Status:** Phases 1–6 are complete. Phase 6 runs on the labelled development mock (`MEMORY_PROVIDER=mock`). A live Walrus connection is blocked: the Testnet relayer has a broken TLS certificate, and the configured account ID was not found on either network. Phase 7 has not been started. See [Progress log](#9-progress-log).
 **Network policy:** Testnet first. No Mainnet credentials, reads, or writes without explicit approval from the project owner.
 
 This plan follows `docs/PRD.md` and `docs/ARCHITECTURE.md`. It records what was verified against official documentation on 2026-10-24, and it changes the architecture where the docs required it.
@@ -302,17 +302,83 @@ The order follows the project owner's brief. Each phase ends with type-check, li
   - a scenario with the constraints after targets were set
   - no page or server errors
 
-### Phase 6: Walrus Memory
-**Depends on:** B1 resolved (or an approved alternative), Walrus credentials, and Phases 3–5.
-- Adapter around `MemWal` (`rememberAndWait`, `recall`, `listMemories`, `health`), the codec, the memory service (write, retrieve by category or query, newest-wins supersession, history), and session principals.
-- Persist onboarding preferences, goals, security feedback, and investment decisions.
-- The Memory page lists records with category, source (user / system / AI), timestamp, `blob_id`, and the supersession chain.
-- `scripts/check-walrus.ts` writes, waits for `done`, then recalls and prints `blob_id`.
+### Phase 6: Walrus Memory (done on the development mock; live Walrus pending)
+**Network decision (2026-10-24):**
+- Testnet first. The Walrus Memory Testnet relayer and dashboard still fail TLS verification: they serve a certificate for `*.up.railway.app`.
+- The configured `MEMWAL_ACCOUNT_ID` exists as an object on neither Testnet nor Mainnet. This was checked read-only.
+- The project owner approved developing Phase 6 against the **SDK mock**. There are **no Mainnet writes, no blockchain transactions, and no real memories**.
 
-**Acceptance:**
-- A write is reported successful only after the job reaches `done`.
-- A record written in one session is recalled after a server restart.
-- Relayer failures surface as explicit errors.
+**Delivered (provider-independent, built against the official SDK interface):**
+- **Explicit provider selection.** `MEMORY_PROVIDER=walrus|mock`; unset means disabled. There is no fallback between providers. Any non-Testnet relayer requires `ALLOW_WALRUS_MAINNET=true`, which is separate from `ALLOW_MAINNET`.
+- **Adapters behind one `MemoryClient` interface.** The interface mirrors the `MemWal` methods `rememberAndWait`, `recall`, `listMemories`, and `health`.
+  - `walrus.adapter.ts` uses `MemWal.create(...)` with typed error mapping (401, 429, unavailable). A write counts only when it returns a `blob_id`.
+  - `mock.adapter.ts` wraps the SDK's `MemWalMock` and adds:
+    - a local git-ignored JSON file, so restarts can be exercised
+    - idempotency across restarts
+    - **simulated** expiry (default 28 days ≈ two Mainnet epochs): expired records stop being recalled but remain listed
+- **Codec.**
+  - Each record is a one-line summary plus a `<<guardian:{json}>>` envelope on the last line, holding version, id, principal tag, category, source, entity, wallet, network, timestamps, supersedes, and tombstone flag.
+  - It is Zod-validated on read, treated as untrusted data, and capped at 16 KB.
+  - It **refuses** private keys, seed phrases, PEM keys, and bearer tokens.
+- **Identity and isolation.**
+  - An anonymous signed httpOnly session cookie (`SESSION_SECRET`, HMAC-SHA256) holds a random principal. **A wallet address is never treated as identity.**
+  - Namespaces `prefix-principal-category` are derived on the server only. Each envelope also carries a principal tag, re-checked on decode.
+- **Memory service.**
+  - Writes are confirmed only once the provider returns a blob id.
+  - Category listing joins recall with `listMemories` for expiry, so expired records are excluded and counted.
+  - Newest-wins supersession per entity, with tombstones for deletion (Walrus cannot delete early).
+  - Full history with statuses: current, superseded, deleted, expired.
+  - Relevance retrieval across categories for assessments and the future copilot.
+  - Records that fail validation are counted as unreadable, never silently dropped.
+- **Persistence through memory:**
+  - savings goals, including earmarks and contribution history (`goal`)
+  - investment preferences, reference prices, targets, and constraints (`profile`)
+  - Protect reviews (`security_decision`), where the server derives the context (recipients, packages, score, critical flag) from its own assessment
+  - investment decisions (`investment_decision`)
+- **Memory changes outcomes:**
+  - **Protect** (`protect-rules/2`), applied to transactions *after* a reviewed one:
+    - recipients you reviewed as *expected* are no longer scored as new
+    - packages in expected transactions count as known
+    - recipients you reviewed as *suspicious* add a **critical** `USER_FLAGGED_RECIPIENT` signal
+    - reviewed non-critical transactions leave the open counts
+  - **Critical signals are fixed before feedback and can never be cleared by it.** Reviewed critical transactions stay open and are marked "still flagged".
+  - **Strategy.** A new scenario that matches a past decision shows "You rejected this kind of change on … because …".
+- **UI:**
+  - a memory banner on every memory-backed page that names the actual provider; the mock is never presented as Walrus
+  - Security Center feedback with a note, review badges, and a memory status line
+  - Savings and Strategy load from memory, with explicit loading, error, expired, unreadable, and truncated states
+  - Financial Memory page: type, summary, source, saved time, status, record and blob ids, and expiry (marked "simulated" on the mock)
+  - a sidebar "Mock" state
+- **APIs.** `/api/memory/{goals,goals/[id],strategy,feedback,decisions,records,relevant}`. Reads never create a session; writes do.
+- **`npm run check:walrus`.** Read-only by default (configuration, health, list). One synthetic test write runs only with `--write-test` **and** `CONFIRM_WALRUS_TEST_WRITE=yes`.
+- **Removed:** the temporary `sessionStorage` stores and the client-side `GoalRepository`.
+- **Fixed:** `handle()` now re-throws Next.js control-flow errors (`unstable_rethrow`). Read routes call `connection()`.
+
+**Verification (2026-10-24):**
+- 166 unit tests. Phase 6 added:
+  - codec round-trip, injection, and key refusal
+  - persistence across restart, idempotency, supersession, tombstones, and wallet scoping
+  - principal isolation, including a forged envelope inside another namespace
+  - simulated expiry
+  - relevance retrieval
+  - provider-failure propagation
+  - session signing and tampering
+  - savings and strategy restoration through the repositories, and feedback persistence
+  - feedback influence: expected, suspicious, unsure, and the temporal rules
+  - **critical signals unaffected by feedback**
+- End-to-end on the running app (mock provider enabled only for the test process, live Tatum Testnet data):
+  - **One "suspicious" review on a real faucet transfer turned all 63 later transfers to that recipient into high, critical findings.** A second session without the cookie saw no change.
+  - A goal, reference prices, targets, and a rejected scenario survived a **server restart** in the browser.
+  - The decision was recalled on the matching scenario.
+  - The Memory page listed 4 records (3 current, 1 superseded), and a fresh browser session saw none.
+- With memory disabled (the current `.env`), memory features report "not configured", Protect scoring still runs, and the status shows "Not set".
+
+**Requires a live Walrus connection (not yet verified):**
+- Real persistence, recall, and `listMemories` on a relayer, and real `expires_at` values instead of simulated ones.
+- Relayer semantics: job latency, rate limits, the effective recall limit, and SEAL session behavior.
+- Real authentication with a valid `MEMWAL_ACCOUNT_ID` and delegate key.
+- Durability across days, and whether the managed relayer renews blobs (unknown).
+- Next steps: when the Testnet relayer is fixed and a Testnet account exists, set `MEMORY_PROVIDER=walrus` and the Testnet `MEMWAL_*` values, run `npm run check:walrus` (read-only), then the confirmed synthetic `--write-test`.
 
 ### Phase 7: AI Copilot
 **Depends on:** Phase 6, an LLM key, and Q5.
@@ -401,3 +467,4 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | 4 Save | Done | The engine, evaluate API, and Savings UI are complete, with 101 unit tests passing. The live API and a browser end-to-end run were verified. Persistence is a labelled temporary per-tab store behind `GoalRepository` because of B1. The `PriceProvider` abstraction was added. |
 | 2026-10-24 | 5 Invest | Done | The allocation engine, reference-price pricing, strategy API, and Strategy UI are complete, with 128 unit tests passing. The live API and a browser end-to-end run were verified. |
 | 2026-10-24 | 6 Walrus prep | Prepared | Read-only research covered the SDK, account setup, authentication, write/read flow, and retention. No Mainnet writes were made. See `docs/WALRUS_INTEGRATION.md`. |
+| 2026-10-24 | 6 Memory | Done on mock | The memory layer, sessions, isolation, persistence for goals, strategy, reviews, and decisions, memory-driven Protect personalization, and the Financial Memory page are complete, with 166 tests passing. End-to-end verified with the mock provider plus live Tatum data. A live Walrus connection is still pending (see the Phase 6 section). |
