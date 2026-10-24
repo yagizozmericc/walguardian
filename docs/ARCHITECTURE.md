@@ -529,6 +529,13 @@ Validated Response
 - Keep prompts and outputs within defined token limits.
 - Provide fallback deterministic assessments when the LLM is unavailable.
 
+### Implemented model (2026-10-24)
+
+- **Provider.** Google Gemini via `@google/genai`. The default `LLM_MODEL` is `gemini-3.5-flash-lite`, on the free tier. The provider sits behind a provider-neutral `LlmProvider` interface and runs server-side only.
+- **Pipeline.** Gather the sources independently, then build bounded context items with citation IDs (`O`/`C`/`P`/`M`) and provenance, then generate structured JSON, then apply Zod and grounding validation (citation existence and figure presence), then respond.
+- **Fallback.** When the model is not used, the response restates engine results with citations and is labelled as deterministic.
+- **Memory.** Memory content reaches the model only as fenced untrusted data. AI output is never written to memory; only the user's own notes are saved, and only when the user explicitly chooses to.
+
 ## 12. Unified Transaction Assessment
 
 This feature combines Protect, Save, Invest, and Memory.

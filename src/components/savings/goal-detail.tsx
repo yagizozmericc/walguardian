@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { validateGoalAmounts } from "@/modules/savings/savings.engine";
 import type { GoalEvaluation, SavingsGoal } from "@/modules/savings/savings.types";
 import { GoalChart } from "./goal-chart";
+import { useCopilot } from "@/components/copilot/copilot-context";
 import { SCHEDULE_LABEL, SCHEDULE_TEXT } from "./labels";
 
 function Figure({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
@@ -102,6 +103,7 @@ export function GoalDetail({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const copilot = useCopilot();
   const unit = goal.symbol ?? "";
   const amt = (v: string | null) => (v === null ? "—" : `${formatAmount(v)} ${unit}`);
   const e = evaluation;
@@ -115,7 +117,10 @@ export function GoalDetail({
             {goal.kind === "reserve" ? "Reserve" : "Savings target"} · {unit} · started {goal.startDate}
           </div>
         </div>
-        <div className="flex shrink-0 gap-1">
+        <div className="flex shrink-0 items-center gap-1">
+          <Button variant="ghost" size="xs" onClick={() => copilot.ask(`How is my goal "${goal.name}" doing, and what would keep it on track?`)}>
+            Ask the copilot
+          </Button>
           <Button variant="ghost" size="icon-sm" aria-label="Edit goal" onClick={onEdit}>
             <Pencil />
           </Button>

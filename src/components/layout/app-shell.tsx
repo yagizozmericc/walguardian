@@ -9,10 +9,11 @@ import { AppSidebar, SidebarNav, Wordmark } from "./app-sidebar";
 import { AddressBar } from "./address-bar";
 import { CopilotPanel } from "./copilot-panel";
 import { IntegrationStatus, NetworkBadge } from "./integration-status";
+import { useCopilot } from "@/components/copilot/copilot-context";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
+  const { open: copilotOpen, setOpen: setCopilotOpen } = useCopilot();
 
   return (
     <div className="flex h-dvh overflow-hidden">
@@ -51,7 +52,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Button
             variant={copilotOpen ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => setCopilotOpen((v) => !v)}
+            onClick={() => setCopilotOpen(!copilotOpen)}
             aria-pressed={copilotOpen}
           >
             <PanelRight />

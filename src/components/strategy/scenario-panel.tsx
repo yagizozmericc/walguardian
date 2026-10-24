@@ -5,6 +5,7 @@ import { History } from "lucide-react";
 import { Panel } from "@/components/common/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useCopilot } from "@/components/copilot/copilot-context";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatAmount } from "@/lib/format";
 import type { RebalanceScenario } from "@/modules/strategy/strategy.types";
@@ -30,8 +31,17 @@ export function ScenarioPanel({
   onDecide?: (decision: "accepted" | "rejected", reason: string) => void;
 }) {
   const [reason, setReason] = useState("");
+  const copilot = useCopilot();
   return (
-    <Panel title="Rebalancing scenario" meta="Illustrative · not executed · not a recommendation">
+    <Panel
+      title="Rebalancing scenario"
+      meta="Illustrative · not executed · not a recommendation"
+      actions={
+        <Button variant="ghost" size="xs" onClick={() => copilot.ask("Explain this rebalancing scenario and how it fits my preferences and past decisions.")}>
+          Ask the copilot
+        </Button>
+      }
+    >
       {pastDecisions.length > 0 && (
         <div className="flex gap-2.5 border-b border-border bg-muted/30 px-4 py-3">
           <History className="mt-0.5 size-3.5 shrink-0 text-subtle" strokeWidth={1.75} aria-hidden />

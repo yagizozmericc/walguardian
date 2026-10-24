@@ -31,6 +31,7 @@ npm run dev                  # http://localhost:3000
 | `npm run check:tatum -- 0xADDRESS` | Live smoke test against Tatum Sui Testnet: prints chain, balances and recent activity |
 | `npm run check:protect -- 0xADDRESS` | Live Protect run: security status, behavioral baseline, and the top-scored transactions with their signals |
 | `npm run check:walrus` | Memory provider check: configuration, health and listing (read-only). `--write-test` with `CONFIRM_WALRUS_TEST_WRITE=yes` writes one synthetic record |
+| `npm run check:llm` | Gemini check: model health and one small structured request (the key is never printed) |
 | `npm run demo:protect` | Runs the scoring engine on **labelled fixture** scenarios (synthetic data) to demonstrate each rule |
 
 ## Integration notes
@@ -43,4 +44,5 @@ npm run dev                  # http://localhost:3000
 - **Memory** (goals, preferences, reviews, decisions) goes through a provider chosen with `MEMORY_PROVIDER`:
   - `mock` is a clearly labelled **development mock** (the SDK's `MemWalMock` plus a local file). It is not Walrus.
   - `walrus` uses the official SDK. A live connection is pending: the Walrus Testnet relayer currently fails TLS. See `docs/WALRUS_INTEGRATION.md`.
+- **Copilot** answers questions using Google Gemini (free tier, `LLM_MODEL`, default `gemini-3.5-flash-lite`). It sees only cited context: Tatum facts, deterministic engine results, your settings and memories. Every claim is checked for a valid citation, and figures not found in the data are flagged. Without `GEMINI_API_KEY`, it returns deterministic summaries.
 - **Protect** scores each sent transaction against the wallet's own earlier history using deterministic rules (`src/modules/security/rules.config.ts`). Anomalies are deviations, not proof of malicious activity. Analysis is historical with manual refresh. Guardian does not monitor in real time and cannot block transactions.

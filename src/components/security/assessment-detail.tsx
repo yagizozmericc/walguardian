@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useCopilot } from "@/components/copilot/copilot-context";
 import { formatTimestamp, suiscanTxUrl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AssessedTransaction, Evidence, SecurityReport } from "@/modules/security/security.types";
@@ -59,6 +60,7 @@ export function AssessmentDetail({
   const a = item.assessment;
   const [note, setNote] = useState("");
   const memoryUsable = memory.status !== "not_configured" && memory.status !== "unavailable";
+  const copilot = useCopilot();
   return (
     <div className="divide-y divide-border">
       <div className="space-y-3 px-4 py-4">
@@ -94,7 +96,12 @@ export function AssessmentDetail({
       </div>
 
       <section className="px-4 py-4">
-        <h3 className="label-caps">Score breakdown</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="label-caps">Score breakdown</h3>
+          <Button variant="ghost" size="xs" onClick={() => copilot.ask(`Explain transaction ${item.digest.slice(0, 10)}…: why did it score ${a.score}, and what should I check?`)}>
+            Ask the copilot
+          </Button>
+        </div>
         {a.signals.length === 0 ? (
           <p className="mt-2 text-[13px] text-muted-foreground">No rule contributed points to this transaction.</p>
         ) : (
