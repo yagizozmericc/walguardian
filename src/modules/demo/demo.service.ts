@@ -36,7 +36,7 @@ export async function seedSynthetic(s: MemoryService, wallet: string, now = new 
   const { byEntity } = await s.current("reasoning", { wallet });
   if (byEntity.has(SYNTHETIC_NOTE_ENTITY)) skipped.push("note (already present)");
   else {
-    await s.write({ category: "reasoning", source: "user", entityId: SYNTHETIC_NOTE_ENTITY, wallet, summary: `${SYNTHETIC_PREFIX} User note: ${SYNTHETIC_NOTE}`, data: { text: SYNTHETIC_NOTE, synthetic: true } });
+    await s.write({ kind: "synthetic", category: "reasoning", source: "user", entityId: SYNTHETIC_NOTE_ENTITY, wallet, summary: `${SYNTHETIC_PREFIX} User note: ${SYNTHETIC_NOTE}`, data: { text: SYNTHETIC_NOTE, synthetic: true } });
     created.push("note");
   }
   return { created, skipped };
@@ -50,18 +50,18 @@ export async function resetSynthetic(s: MemoryService, wallet: string): Promise<
   for (const id of SYNTHETIC_GOAL_IDS) {
     const r = goals.byEntity.get(`goal:${id}`);
     if (!r) continue;
-    await s.write({ category: "goal", source: "system", entityId: `goal:${id}`, wallet, supersedes: r.id, deleted: true, summary: `${SYNTHETIC_PREFIX} Removed synthetic goal.`, data: { goalId: id } });
+    await s.write({ kind: "synthetic", category: "goal", source: "system", entityId: `goal:${id}`, wallet, supersedes: r.id, deleted: true, summary: `${SYNTHETIC_PREFIX} Removed synthetic goal.`, data: { goalId: id } });
     created.push(`removed goal ${id}`);
   }
   const strategy = await loadStrategy(s, wallet);
   if (strategy.memory && isSynthetic(strategy.memory)) {
-    await s.write({ category: "profile", source: "system", entityId: `strategy:${wallet}`, wallet, supersedes: strategy.memory.id, deleted: true, summary: `${SYNTHETIC_PREFIX} Removed synthetic investment preferences.`, data: {} });
+    await s.write({ kind: "synthetic", category: "profile", source: "system", entityId: `strategy:${wallet}`, wallet, supersedes: strategy.memory.id, deleted: true, summary: `${SYNTHETIC_PREFIX} Removed synthetic investment preferences.`, data: {} });
     created.push("removed investment preferences");
   } else if (strategy.memory) skipped.push("investment preferences (your own settings are kept)");
   const notes = await s.current("reasoning", { wallet });
   const note = notes.byEntity.get(SYNTHETIC_NOTE_ENTITY);
   if (note) {
-    await s.write({ category: "reasoning", source: "system", entityId: SYNTHETIC_NOTE_ENTITY, wallet, supersedes: note.id, deleted: true, summary: `${SYNTHETIC_PREFIX} Removed synthetic note.`, data: {} });
+    await s.write({ kind: "synthetic", category: "reasoning", source: "system", entityId: SYNTHETIC_NOTE_ENTITY, wallet, supersedes: note.id, deleted: true, summary: `${SYNTHETIC_PREFIX} Removed synthetic note.`, data: {} });
     created.push("removed note");
   }
   return { created, skipped };

@@ -13,6 +13,7 @@ export async function POST(req: Request) {
     const wallet = walletParam(parsed.data.address);
     const service = (await memoryForRequest({ create: true }))!;
     const record = await service.write({
+      kind: "note",
       category: "reasoning",
       source: "user",
       entityId: `note:${crypto.randomUUID()}`,

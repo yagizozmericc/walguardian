@@ -4,6 +4,7 @@ import { useState } from "react";
 import { History } from "lucide-react";
 import { Panel } from "@/components/common/page";
 import { Button } from "@/components/ui/button";
+import { useMemoryWrites } from "@/components/memory/use-memory-writes";
 import { Input } from "@/components/ui/input";
 import { useCopilot } from "@/components/copilot/copilot-context";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -31,6 +32,7 @@ export function ScenarioPanel({
   onDecide?: (decision: "accepted" | "rejected", reason: string) => void;
 }) {
   const [reason, setReason] = useState("");
+  const writes = useMemoryWrites();
   const copilot = useCopilot();
   return (
     <Panel
@@ -86,20 +88,23 @@ export function ScenarioPanel({
         </Table>
       )}
 
-      {onDecide && scenario.trades.length > 0 && (
+      {onDecide && scenario.trades.length > 0 && !writes.enabled && <p className="border-t border-border px-4 py-3 text-xs text-subtle">{writes.detail}</p>}
+      {onDecide && scenario.trades.length > 0 && writes.enabled && (
         <form
           className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3"
           onSubmit={(e) => e.preventDefault()}
         >
           <span className="text-xs text-subtle">Record your decision</span>
-          <Input
-            aria-label="Reason (optional)"
-            placeholder="Reason (optional, no personal data)"
-            className="h-8 max-w-xs flex-1 text-[13px]"
-            maxLength={300}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
+          {writes.allowNotes && (
+            <Input
+              aria-label="Reason (optional)"
+              placeholder="Reason (optional, no personal data)"
+              className="h-8 max-w-xs flex-1 text-[13px]"
+              maxLength={300}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          )}
           <Button type="button" size="sm" variant="outline" disabled={deciding} onClick={() => { onDecide("accepted", reason.trim()); setReason(""); }}>
             Accept
           </Button>

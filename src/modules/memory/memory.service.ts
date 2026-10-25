@@ -1,6 +1,7 @@
 import { principalTag } from "@/modules/session/session";
 import { decodeMemory, encodeMemory } from "./memory.codec";
 import type { MemoryClient } from "./memory.client";
+import type { WriteGuard, WriteKind } from "./memory.policy";
 import type { MemoryCategory, MemoryHistoryEntry, MemoryRecord, MemorySource } from "./memory.types";
 import { MEMORY_CATEGORIES } from "./memory.types";
 
@@ -13,6 +14,8 @@ import { MEMORY_CATEGORIES } from "./memory.types";
 const RECALL_LIMIT = 100;
 
 export interface WriteInput {
+  /** What is being written; checked against the deployment's write policy. */
+  kind: WriteKind;
   category: MemoryCategory;
   source: MemorySource;
   entityId: string;
@@ -39,6 +42,7 @@ export class MemoryService {
     private readonly cfg: { namespacePrefix: string; network: "testnet" | "mainnet" },
     private readonly principalId: string,
     private readonly now: () => Date = () => new Date(),
+    private readonly guard: WriteGuard | null = null,
   ) {
     this.tag = principalTag(principalId);
   }
@@ -52,6 +56,7 @@ export class MemoryService {
   }
 
   async write(input: WriteInput): Promise<MemoryRecord> {
+    await this.guard?.beforeWrite({ kind: input.kind, data: input.data }, this.principalId);
     const envelope = {
       v: 1 as const,
       id: crypto.randomUUID(),

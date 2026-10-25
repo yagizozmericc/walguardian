@@ -65,6 +65,7 @@ export function MemoryView() {
         className="mb-3"
         provider={data?.provider ?? null}
         what="Memories"
+        structured
         notices={[
           "Access is tied to this browser's signed session, not to a wallet address. Clearing cookies ends access from this browser.",
           "Walrus Memory content is encrypted at rest, but the hosted relayer processes plaintext. Store only non-sensitive, synthetic data.",

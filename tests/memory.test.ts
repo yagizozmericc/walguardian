@@ -30,6 +30,7 @@ afterEach(async () => {
 
 const service = (principal: string, client = new MockMemoryClient(file, 28, now)) => new MemoryService(client, CFG, principal, now);
 const goalInput = (name: string, extra: Partial<Parameters<MemoryService["write"]>[0]> = {}) => ({
+  kind: "goal" as const,
   category: "goal" as const,
   source: "user" as const,
   entityId: "goal:g1",
@@ -130,8 +131,8 @@ describe("expiry", () => {
 describe("relevant memories", () => {
   it("returns the closest matches across categories, excluding tombstones", async () => {
     const s = service(ALICE);
-    await s.write({ category: "security_decision", source: "user", entityId: "tx:1", wallet: WALLET, summary: "User marked transfer to cold wallet as expected", data: {} });
-    await s.write({ category: "reasoning", source: "user", entityId: "note:1", wallet: WALLET, summary: "Rent is paid monthly to landlord", data: {} });
+    await s.write({ kind: "security_feedback", category: "security_decision", source: "user", entityId: "tx:1", wallet: WALLET, summary: "User marked transfer to cold wallet as expected", data: {} });
+    await s.write({ kind: "note", category: "reasoning", source: "user", entityId: "note:1", wallet: WALLET, summary: "Rent is paid monthly to landlord", data: {} });
     const r = await s.relevant("cold wallet transfer", ["security_decision", "reasoning"], { limit: 1 });
     expect(r[0].summary).toContain("cold wallet");
   });

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useMemoryWrites } from "@/components/memory/use-memory-writes";
 import { Textarea } from "@/components/ui/textarea";
 import { useCopilot } from "@/components/copilot/copilot-context";
 import { formatTimestamp, suiscanTxUrl } from "@/lib/format";
@@ -60,6 +61,7 @@ export function AssessmentDetail({
   const a = item.assessment;
   const [note, setNote] = useState("");
   const memoryUsable = memory.status !== "not_configured" && memory.status !== "unavailable";
+  const writes = useMemoryWrites();
   const copilot = useCopilot();
   return (
     <div className="divide-y divide-border">
@@ -167,17 +169,21 @@ export function AssessmentDetail({
             )}
           </div>
         )}
-        {memoryUsable && onFeedback ? (
+        {memoryUsable && onFeedback && !writes.enabled ? (
+          <p className="text-xs text-subtle">{writes.detail}</p>
+        ) : memoryUsable && onFeedback ? (
           <>
-            <Textarea
-              aria-label="Explain your decision (optional)"
-              placeholder="Explain your decision (optional, no personal data)"
-              rows={2}
-              maxLength={500}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="text-[13px]"
-            />
+            {writes.allowNotes && (
+              <Textarea
+                aria-label="Explain your decision (optional)"
+                placeholder="Explain your decision (optional, no personal data)"
+                rows={2}
+                maxLength={500}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="text-[13px]"
+              />
+            )}
             <div className="flex flex-wrap gap-2">
               {VERDICTS.map(([v, label]) => (
                 <Button
@@ -197,6 +203,7 @@ export function AssessmentDetail({
             <p className="text-xs text-subtle">
               Saved to {memory.provider === "mock" ? "development mock memory (not Walrus)" : "Walrus Memory"}. It personalizes later assessments
               (known or flagged recipients) but never clears a critical signal.
+              {writes.detail && <> {writes.detail}</>}
             </p>
           </>
         ) : (

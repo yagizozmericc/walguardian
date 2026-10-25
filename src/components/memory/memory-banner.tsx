@@ -6,11 +6,14 @@ export function MemoryBanner({
   provider,
   what,
   notices = [],
+  structured = false,
   className,
 }: {
   provider: MemoryProviderInfo | null;
   /** e.g. "Goals", "Preferences and reference prices" */
   what: string;
+  /** True when `what` is a predefined structured record (decisions, reviews) that a structured-only policy accepts. */
+  structured?: boolean;
   notices?: string[];
   className?: string;
 }) {
@@ -24,11 +27,16 @@ export function MemoryBanner({
       ? `${what} cannot be saved: memory is not configured.`
       : provider.provider === "mock"
         ? `${what} are saved to development mock memory, not Walrus.`
-        : `${what} are saved to ${provider.label}.`;
+        : !provider.writes.enabled
+          ? `${what} cannot be saved: memory is read-only in this deployment.`
+          : provider.writes.structuredOnly && !structured
+            ? `${what} are not saved in this public demo.`
+            : `${what} are saved to ${provider.label}.`;
   return (
     <div className={cn("rounded-lg border px-4 py-3 text-[13px]", tone, className)}>
       <span className={cn("font-medium", provider.provider === "walrus" ? "text-foreground" : "text-warning")}>{headline}</span>{" "}
       <span className="text-muted-foreground">{provider.detail}</span>
+      {provider.writes.detail && <p className="mt-1 text-xs text-muted-foreground">{provider.writes.detail}</p>}
       {notices.map((n) => (
         <p key={n} className="mt-1 text-xs text-muted-foreground">
           {n}

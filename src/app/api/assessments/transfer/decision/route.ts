@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     const service = (await memoryForRequest({ create: true }))!;
     const d = parsed.data;
     const record = await service.write({
+      kind: "transfer_decision",
       category: "reasoning",
       source: "user",
       entityId: `${TRANSFER_CHECK_PREFIX}${crypto.randomUUID()}`,

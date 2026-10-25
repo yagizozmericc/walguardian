@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUp, Bookmark, Check, X } from "lucide-react";
 import { ErrorState } from "@/components/common/states";
 import { useCopilot } from "@/components/copilot/copilot-context";
+import { useMemoryWrites } from "@/components/memory/use-memory-writes";
 import { useWatchAddress } from "@/components/providers/watch-context";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -94,6 +95,7 @@ export function Answer({ r }: { r: CopilotResponse }) {
 
 /** Contextual copilot side panel: answers use cited Tatum data, engine results and memories. */
 export function CopilotPanel({ onClose }: { onClose: () => void }) {
+  const writes = useMemoryWrites();
   const { address } = useWatchAddress();
   const { messages, pending, ask, remember, clear } = useCopilot();
   const [draft, setDraft] = useState("");
@@ -146,17 +148,19 @@ export function CopilotPanel({ onClose }: { onClose: () => void }) {
             m.role === "user" ? (
               <div key={m.id} className="ml-8">
                 <div className="rounded-lg bg-muted/60 px-3 py-2 text-[13px]">{m.text}</div>
-                <div className="mt-1 flex justify-end">
-                  <button
-                    onClick={() => remember(m.id)}
-                    disabled={m.saved === "saving" || m.saved === "saved"}
-                    className="inline-flex items-center gap-1 text-[11px] text-subtle hover:text-foreground disabled:hover:text-subtle"
-                    title="Save your own words as a memory the copilot can use later"
-                  >
-                    {m.saved === "saved" ? <Check className="size-3" /> : <Bookmark className="size-3" />}
-                    {m.saved === "saved" ? "Remembered" : m.saved === "saving" ? "Saving…" : m.saved === "error" ? "Could not save — retry" : "Remember this"}
-                  </button>
-                </div>
+                {writes.allowNotes && writes.enabled && (
+                  <div className="mt-1 flex justify-end">
+                    <button
+                      onClick={() => remember(m.id)}
+                      disabled={m.saved === "saving" || m.saved === "saved"}
+                      className="inline-flex items-center gap-1 text-[11px] text-subtle hover:text-foreground disabled:hover:text-subtle"
+                      title="Save your own words as a memory the copilot can use later"
+                    >
+                      {m.saved === "saved" ? <Check className="size-3" /> : <Bookmark className="size-3" />}
+                      {m.saved === "saved" ? "Remembered" : m.saved === "saving" ? "Saving…" : m.saved === "error" ? "Could not save — retry" : "Remember this"}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : m.role === "assistant" ? (
               <div key={m.id}>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Panel } from "@/components/common/page";
 import { Button } from "@/components/ui/button";
+import { useMemoryWrites } from "@/components/memory/use-memory-writes";
 import { Input } from "@/components/ui/input";
 import { formatAmount, formatTimestamp } from "@/lib/format";
 import { shortAddress } from "@/lib/sui-address";
@@ -171,9 +172,13 @@ export function PillarPanels({ a }: { a: TransferAssessment }) {
 
 export function DecisionForm({ onSave, saving, saved }: { onSave: (decision: "would_proceed" | "would_not_proceed", note: string) => void; saving: boolean; saved: boolean }) {
   const [note, setNote] = useState("");
+  const writes = useMemoryWrites();
+  if (!writes.enabled) return <p className="px-4 py-3 text-xs text-subtle">{writes.detail}</p>;
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-      <Input aria-label="Note (optional)" placeholder="Note (optional, no personal data)" className="h-8 max-w-sm flex-1 text-[13px]" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />
+      {writes.allowNotes && (
+        <Input aria-label="Note (optional)" placeholder="Note (optional, no personal data)" className="h-8 max-w-sm flex-1 text-[13px]" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />
+      )}
       <Button size="sm" variant="outline" disabled={saving} onClick={() => onSave("would_proceed", note.trim())}>
         I would proceed
       </Button>

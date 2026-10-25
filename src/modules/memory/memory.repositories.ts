@@ -46,6 +46,7 @@ export async function saveGoal(s: MemoryService, wallet: string, goal: SavingsGo
   const earmarked = formatAmount(formatUnits(earmarkedRaw(goal), goal.decimals));
   const unit = goal.symbol ?? "units";
   return s.write({
+    kind: opts.synthetic ? "synthetic" : "goal",
     category: "goal",
     source: "user",
     entityId: `goal:${goal.id}`,
@@ -61,7 +62,7 @@ export async function deleteGoal(s: MemoryService, wallet: string, goalId: strin
   const prev = byEntity.get(`goal:${goalId}`);
   if (!prev) throw new ValidationError("That goal was not found in memory.");
   const name = SavingsGoalSchema.safeParse(prev.data).success ? (prev.data as SavingsGoal).name : goalId;
-  return s.write({ category: "goal", source: "user", entityId: `goal:${goalId}`, wallet, supersedes: prev.id, deleted: true, summary: `Deleted savings goal "${name}".`, data: { goalId } });
+  return s.write({ kind: "goal_delete", category: "goal", source: "user", entityId: `goal:${goalId}`, wallet, supersedes: prev.id, deleted: true, summary: `Deleted savings goal "${name}".`, data: { goalId } });
 }
 
 // ---- Strategy settings (investment preferences) --------------------------
@@ -77,6 +78,7 @@ export async function saveStrategy(s: MemoryService, wallet: string, settings: S
   const { memory } = await loadStrategy(s, wallet);
   const t = settings.targets;
   return s.write({
+    kind: opts.synthetic ? "synthetic" : "strategy",
     category: "profile",
     source: "user",
     entityId: `strategy:${wallet}`,
@@ -130,6 +132,7 @@ export async function saveFeedback(s: MemoryService, wallet: string, f: Feedback
   const { byEntity } = await s.current("security_decision", { wallet });
   const prev = byEntity.get(`tx:${f.digest}`);
   return s.write({
+    kind: "security_feedback",
     category: "security_decision",
     source: "user",
     entityId: `tx:${f.digest}`,
@@ -168,6 +171,7 @@ export async function listDecisions(s: MemoryService, wallet: string): Promise<L
 
 export async function saveDecision(s: MemoryService, wallet: string, d: Decision): Promise<MemoryRecord> {
   return s.write({
+    kind: "investment_decision",
     category: "investment_decision",
     source: "user",
     entityId: `decision:${crypto.randomUUID()}`,

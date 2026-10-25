@@ -38,6 +38,7 @@ async function main() {
     throw new Error("Refusing to write: set CONFIRM_WALRUS_TEST_WRITE=yes to confirm one synthetic test write.");
   }
   const written = await service.write({
+    kind: "connectivity_check",
     category: "reasoning",
     source: "system",
     entityId: "check:connectivity",

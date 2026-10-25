@@ -60,7 +60,7 @@ describe("savings state restoration", () => {
 
   it("counts records with invalid payloads instead of silently dropping them", async () => {
     const s = svc();
-    await s.write({ category: "goal", source: "user", entityId: "goal:bad", wallet: WALLET, summary: "corrupt", data: { not: "a goal" } });
+    await s.write({ kind: "goal", category: "goal", source: "user", entityId: "goal:bad", wallet: WALLET, summary: "corrupt", data: { not: "a goal" } });
     const r = await listGoals(svc(), WALLET);
     expect(r.items).toEqual([]);
     expect(r.unreadable).toBe(1);

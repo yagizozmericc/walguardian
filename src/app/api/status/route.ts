@@ -7,6 +7,7 @@ import type { IntegrationStatusItem, IntegrationStatusResponse } from "@/lib/sta
 import { getMemoryClient, memoryProviderInfo } from "@/modules/memory/memory.factory";
 import { getLlm } from "@/modules/ai/agent.service";
 import { DEMO_WALLET_LABEL, demoWalletAddress } from "@/lib/demo";
+import { getKv } from "@/lib/kv";
 
 let llmHealth: { at: number; item: IntegrationStatusItem } | null = null;
 
@@ -35,6 +36,18 @@ async function memoryStatus(): Promise<IntegrationStatusItem> {
   }
 }
 
+async function redisStatus(): Promise<IntegrationStatusItem> {
+  const base = { id: "redis" as const, label: "Shared limits", checkedAt: new Date().toISOString() };
+  const { store, shared } = getKv();
+  if (!shared) return { ...base, state: "not_configured", detail: "Redis is not configured: rate limits and caches apply per server instance." };
+  try {
+    await store.ping();
+    return { ...base, state: "connected", detail: `Upstash Redis (${env().deployment.environment} keys): shared rate limits, write quotas, Tatum budget and short-lived caches.` };
+  } catch {
+    return { ...base, state: "error", detail: "Redis is unreachable: reads use stricter per-instance limits; AI calls and memory writes are paused." };
+  }
+}
+
 async function tatumStatus(): Promise<IntegrationStatusItem> {
   const e = env();
   const base = { id: "tatum" as const, label: "Tatum", checkedAt: new Date().toISOString() };
@@ -60,11 +73,13 @@ export async function GET() {
       await tatumStatus(),
       await memoryStatus(),
       await llmStatus(),
+      await redisStatus(),
     ];
     const body: IntegrationStatusResponse = {
       network: e.network,
       integrations,
       demo: { walletAddress: demoWalletAddress(), label: DEMO_WALLET_LABEL, syntheticDataAvailable: memoryProviderInfo().provider === "mock" },
+      memoryWrites: memoryProviderInfo().writes,
     };
     return Response.json(body, { headers: { "x-request-id": requestId } });
   } catch (err) {
