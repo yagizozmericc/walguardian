@@ -4,7 +4,7 @@
 
 - **Owner decisions (Phase 10).** Prepare the **Mainnet hosted relayer** (`https://relayer.memory.walrus.xyz`) with **synthetic data only**. The mock stays the default locally; memory stays disabled on Vercel until the Walrus checks pass. The owner creates the account manually on the dashboard (B, approved). Walrus on Preview is approved in principle after verification (C). **Mainnet writes are not approved yet (D)**: the first synthetic write and any shared seed need explicit approval. Production needs a separate approval.
 - **Safety controls implemented** (`src/modules/memory/memory.policy.ts`, enforced in `MemoryService.write`): Walrus is read-only unless `MEMORY_WRITES_ENABLED=true`; a structured-only policy accepts only predefined decisions and security review verdicts (no free text, goals or notes); per-session and global daily quotas on Redis, failing closed if Redis is down. See `docs/DEPLOYMENT.md`.
-- **Read-only verification** is ready: `npm run check:walrus` checks the relayer's reported network against the configuration, validates credentials with an authenticated listing (`health()` does not check credentials), and prints record expiry. No credentials are configured yet, so it has not run against Mainnet.
+- **Read-only verification passed (2026-10-25)** against the Mainnet relayer: credentials accepted, authenticated listing and recall (embedding) work. The first attempt failed because `MEMWAL_ACCOUNT_ID` held the owner's wallet address; it now holds the MemWalAccount object. Tool: `npm run check:walrus` checks the relayer's reported network against the configuration, validates credentials with an authenticated listing (`health()` does not check credentials), and prints record expiry. No credentials are configured yet, so it has not run against Mainnet.
 - **No memory writes and no transactions have been made** on any Walrus network.
 - **Testnet** relayer and dashboard still fail TLS (re-checked 2026-10-25). The owner has handled this separately; the draft is kept in `docs/issues/walrus-staging-tls.md`.
 
@@ -42,7 +42,7 @@ Sources: docs.wal.app/walrus-memory (manage-your-memory, funding-storage, tracki
 2. In `.env`, set:
    - `MEMORY_PROVIDER=walrus`
    - `MEMWAL_SERVER_URL` (`https://relayer.memory.walrus.xyz` for Mainnet, with `ALLOW_WALRUS_MAINNET=true`)
-   - `MEMWAL_ACCOUNT_ID` and `MEMWAL_PRIVATE_KEY` from that dashboard
+   - `MEMWAL_ACCOUNT_ID` and `MEMWAL_PRIVATE_KEY` from that dashboard. The account ID is the **MemWalAccount object ID**, not the owner's wallet address; `check:walrus` checks this onchain (read-only) and names the correct object if the owner address was used.
    - keep `SESSION_SECRET`
 3. Run `npm run check:walrus`. It is read-only: configuration, health, listing.
 4. With approval: `MEMORY_WRITES_ENABLED=true CONFIRM_WALRUS_TEST_WRITE=yes npm run check:walrus -- --write-test` (one synthetic record; also needs the Redis variables for quotas).

@@ -14,7 +14,9 @@
 import { existsSync } from "node:fs";
 import { AppError } from "@/lib/errors";
 import { parseEnv } from "@/lib/env";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { getMemoryClient, getMemoryService, memoryProviderInfo } from "@/modules/memory/memory.factory";
+import { classifyAccountId, describeDiagnosis, lookupAccountId } from "@/modules/memory/walrus.account";
 
 for (const file of [".env.local", ".env"]) if (existsSync(file)) process.loadEnvFile(file);
 
@@ -27,9 +29,24 @@ async function main() {
 
   if (cfg.provider === "walrus") {
     // Unauthenticated, read-only: the relayer's own view of its network must match the configuration.
-    const remote = (await (await fetch(`${cfg.serverUrl}/config`, { signal: AbortSignal.timeout(10_000) })).json()) as { network?: string };
+    const remote = (await (await fetch(`${cfg.serverUrl}/config`, { signal: AbortSignal.timeout(10_000) })).json()) as { network?: string; packageId?: string };
     console.log(`relayer network: ${remote.network ?? "unknown"} (configured: ${cfg.network})`);
     if (cfg.network !== "unknown" && remote.network !== cfg.network) throw new Error("The relayer reports a different network than configured. Stopping.");
+
+    // Read-only onchain check of MEMWAL_ACCOUNT_ID before any authenticated call, so a wrong ID
+    // (most often the owner's wallet address) gets a specific fix instead of a generic auth error.
+    const network = remote.network === "mainnet" || remote.network === "testnet" ? remote.network : null;
+    if (network) {
+      const delegatePublicKeyB64 = Buffer.from(Ed25519Keypair.fromSecretKey(Uint8Array.from(Buffer.from(cfg.key.replace(/^0x/, ""), "hex"))).getPublicKey().toRawBytes()).toString("base64");
+      try {
+        const diagnosis = classifyAccountId(await lookupAccountId(cfg.accountId, network), { packageId: remote.packageId, delegatePublicKeyB64 });
+        console.log(`account: ${describeDiagnosis(diagnosis)}`);
+        if (diagnosis.kind !== "ok") throw new Error("Fix MEMWAL_ACCOUNT_ID / MEMWAL_PRIVATE_KEY as described above. No authenticated relayer calls were made.");
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith("Fix MEMWAL")) throw err;
+        console.log(`account: onchain check unavailable (${err instanceof Error ? err.message : String(err)}); continuing with the relayer checks.`);
+      }
+    }
   }
 
   const client = getMemoryClient();
