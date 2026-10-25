@@ -96,12 +96,15 @@ export function GoalDetail({
   onSave,
   onEdit,
   onDelete,
+  readOnlyReason = null,
 }: {
   goal: SavingsGoal;
   evaluation: GoalEvaluation | null;
   onSave: (g: SavingsGoal) => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Why changes cannot be saved in this deployment; null when they can. */
+  readOnlyReason?: string | null;
 }) {
   const copilot = useCopilot();
   const unit = goal.symbol ?? "";
@@ -121,13 +124,15 @@ export function GoalDetail({
           <Button variant="ghost" size="xs" onClick={() => copilot.ask(`How is my goal "${goal.name}" doing, and what would keep it on track?`)}>
             Ask the copilot
           </Button>
-          <Button variant="ghost" size="icon-sm" aria-label="Edit goal" onClick={onEdit}>
+          <Button variant="ghost" size="icon-sm" aria-label="Edit goal" onClick={onEdit} disabled={readOnlyReason !== null} title={readOnlyReason ?? undefined}>
             <Pencil />
           </Button>
           <Button
             variant="ghost"
             size="icon-sm"
             aria-label="Delete goal"
+            disabled={readOnlyReason !== null}
+            title={readOnlyReason ?? undefined}
             onClick={() => {
               if (window.confirm(`Delete "${goal.name}"? A deletion record is saved to memory. Earlier records cannot be erased and remain until they expire.`)) onDelete();
             }}
@@ -225,7 +230,7 @@ export function GoalDetail({
 
       <section className="space-y-3 px-4 py-4">
         <h3 className="label-caps">Earmarked funds</h3>
-        <AllocationForm goal={goal} onSave={onSave} />
+        {readOnlyReason ? <p className="text-xs text-subtle">{readOnlyReason}</p> : <AllocationForm goal={goal} onSave={onSave} />}
         {goal.allocations.length === 0 ? (
           <p className="text-xs text-subtle">No funds earmarked yet.</p>
         ) : (

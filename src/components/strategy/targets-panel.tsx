@@ -12,7 +12,16 @@ import { ASSET_CLASSES, StrategySettingsSchema, type StrategySettings } from "@/
 const CLASS_LABEL = { native: "SUI", stablecoin: "Stablecoins", other: "Other assets" } as const;
 const NONE = "__none";
 
-export function TargetsPanel({ settings, onSave }: { settings: StrategySettings; onSave: (next: StrategySettings) => void }) {
+export function TargetsPanel({
+  settings,
+  onSave,
+  saveDisabledReason = null,
+}: {
+  settings: StrategySettings;
+  onSave: (next: StrategySettings) => void;
+  /** Why settings cannot be saved in this deployment; null when they can. */
+  saveDisabledReason?: string | null;
+}) {
   const [targets, setTargets] = useState({
     native: settings.targets?.native ?? "",
     stablecoin: settings.targets?.stablecoin ?? "",
@@ -138,7 +147,10 @@ export function TargetsPanel({ settings, onSave }: { settings: StrategySettings;
             ))}
           </ul>
         )}
-        <Button type="submit" size="sm">Save targets and constraints</Button>
+        {saveDisabledReason && <p className="text-xs text-subtle">{saveDisabledReason}</p>}
+        <Button type="submit" size="sm" disabled={saveDisabledReason !== null} title={saveDisabledReason ?? undefined}>
+          Save targets and constraints
+        </Button>
       </form>
     </Panel>
   );

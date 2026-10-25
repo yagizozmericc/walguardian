@@ -4,7 +4,9 @@ import type { MemoryWriteConfig } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import type { Kv } from "@/lib/kv";
 import { logger } from "@/lib/logger";
+import { MAX_TYPE_TAG_LENGTH, isCanonicalStructTag } from "@/lib/sui-type";
 import { consumeLimits } from "@/lib/rate-limit";
+import type { WriteKind } from "./memory.capabilities";
 
 /**
  * Write controls for memory, enforced in MemoryService.write so no route can
@@ -15,19 +17,9 @@ import { consumeLimits } from "@/lib/rate-limit";
  *  3. per-session and global daily quotas on the shared store.
  */
 
-export type WriteKind =
-  | "security_feedback"
-  | "transfer_decision"
-  | "investment_decision"
-  | "goal"
-  | "goal_delete"
-  | "strategy"
-  | "note"
-  | "synthetic"
-  | "connectivity_check";
+export type { WriteKind } from "./memory.capabilities";
 
 const ADDRESS = /^0x[0-9a-f]{64}$/;
-const COIN_TYPE = /^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,63}::[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const DIGEST = /^[1-9A-HJ-NP-Za-km-z]{20,64}$/;
 const PERCENT = /^\d{1,3}(\.\d{1,2})?$/;
 // Mirrors describeScenario(): "reduce A[, B]; increase C" over the fixed class names, or "no change".
@@ -51,7 +43,7 @@ const STRUCTURED: Partial<Record<WriteKind, z.ZodType>> = {
   transfer_decision: z
     .object({
       recipient: z.string().regex(ADDRESS),
-      coinType: z.string().regex(COIN_TYPE),
+      coinType: z.string().max(MAX_TYPE_TAG_LENGTH).refine(isCanonicalStructTag, "Not a canonical Sui coin type."),
       amount: z.string().regex(/^\d{1,30}(\.\d{1,30})?$/),
       decision: z.enum(["would_proceed", "would_not_proceed"]),
       note: z.null({ error: "Notes are not stored in this deployment." }),
@@ -68,6 +60,9 @@ const STRUCTURED: Partial<Record<WriteKind, z.ZodType>> = {
   // The operator's one-off connectivity check (scripts/check-walrus.ts): a fixed, synthetic record.
   connectivity_check: z.object({ synthetic: z.literal(true), at: z.iso.datetime() }).strict(),
 };
+
+/** Kinds with a structured schema; must equal STRUCTURED_KINDS in memory.capabilities (tested). */
+export const structuredPolicyKinds = (): WriteKind[] => Object.keys(STRUCTURED) as WriteKind[];
 
 export const STRUCTURED_ONLY_DETAIL =
   "This public demo stores only predefined choices: security review verdicts, transfer decisions and rebalancing decisions. Notes, goals and other free text are not stored.";

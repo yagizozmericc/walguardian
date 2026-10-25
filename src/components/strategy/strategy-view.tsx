@@ -20,6 +20,7 @@ import { ScenarioPanel } from "./scenario-panel";
 import { TargetsPanel } from "./targets-panel";
 import { defaultStrategySettings, describeScenario } from "@/modules/strategy/strategy.defaults";
 import type { Decision } from "@/modules/memory/memory.repositories";
+import { writeAvailability } from "@/modules/memory/memory.capabilities";
 
 export function StrategyView() {
   const { address } = useWatchAddress();
@@ -27,6 +28,8 @@ export function StrategyView() {
   const strategyResponse = strategy.state.status === "ready" ? strategy.state.data : null;
   const settings = useMemo(() => strategyResponse?.settings ?? defaultStrategySettings(), [strategyResponse]);
   const save = (next: typeof settings) => strategy.save(next);
+  const availability = writeAvailability(strategyResponse?.provider, "strategy");
+  const saveDisabledReason = availability.allowed ? null : availability.reason;
   const goalsMemory = useMemoryGoals(address);
   const goals = useMemo(() => (goalsMemory.state.status === "ready" ? goalsMemory.state.data.items : []), [goalsMemory.state]);
   const decisions = useApiResource<{ items: (Decision & { memoryId: string; createdAt: string })[] }>(address ? `/api/memory/decisions?address=${address}` : null);
@@ -166,12 +169,12 @@ export function StrategyView() {
           )}
 
           {evaluation && (
-            <ReferencePricesPanel key={`${address}:${settings.updatedAt}`} rows={priceRows} settings={settings} onSave={save} />
+            <ReferencePricesPanel key={`${address}:${settings.updatedAt}`} rows={priceRows} settings={settings} onSave={save} saveDisabledReason={saveDisabledReason} />
           )}
         </div>
 
         <div className="lg:sticky lg:top-6 lg:self-start">
-          <TargetsPanel key={`${address}:${settings.updatedAt}`} settings={settings} onSave={save} />
+          <TargetsPanel key={`${address}:${settings.updatedAt}`} settings={settings} onSave={save} saveDisabledReason={saveDisabledReason} />
           {earmarks.length > 0 && (
             <p className="mt-3 px-1 text-xs text-subtle">
               Savings earmarks ({earmarks.length} asset{earmarks.length === 1 ? "" : "s"}) are treated as locked and never reduced in scenarios.

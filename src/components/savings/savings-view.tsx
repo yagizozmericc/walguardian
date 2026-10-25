@@ -17,6 +17,7 @@ import { GoalDetail } from "./goal-detail";
 import { GoalFormSheet, type GoalAsset } from "./goal-form";
 import { SCHEDULE_LABEL, SCHEDULE_TEXT } from "./labels";
 import { MemoryBanner, memoryNotices } from "@/components/memory/memory-banner";
+import { writeAvailability } from "@/modules/memory/memory.capabilities";
 import { useMemoryGoals } from "@/components/memory/use-memory";
 import { useSavingsEvaluation } from "./use-savings";
 
@@ -33,7 +34,9 @@ export function SavingsView() {
     }),
     [goalsResponse],
   );
-  const canSave = goalsResponse !== null && goalsResponse.provider.provider !== "disabled";
+  const availability = writeAvailability(goalsResponse?.provider, "goal");
+  const canSave = availability.allowed;
+  const readOnlyReason = availability.allowed ? null : availability.reason;
   const save = (g: SavingsGoal) => memory.save(g);
   const remove = (id: string) => memory.remove(id);
   const { state: evalState } = useSavingsEvaluation(address, goals);
@@ -89,7 +92,7 @@ export function SavingsView() {
                 Checked against Tatum · {formatRelative(evaluation.source.fetchedAt)}
               </span>
             )}
-            <Button size="sm" onClick={() => openForm(null)} disabled={portfolio.state.status === "loading" || !canSave}>
+            <Button size="sm" onClick={() => openForm(null)} disabled={portfolio.state.status === "loading" || !canSave} title={readOnlyReason ?? undefined}>
               <Plus />
               New goal
             </Button>
@@ -124,9 +127,13 @@ export function SavingsView() {
         <Panel>
           <EmptyState
             title="No savings goals yet"
-            description="Create a savings target (for example 2,000 USDC by a date) or a reserve (a minimum you want kept aside). Then earmark funds from this wallet toward it."
+            description={
+              goalsResponse && readOnlyReason
+                ? readOnlyReason
+                : "Create a savings target (for example 2,000 USDC by a date) or a reserve (a minimum you want kept aside). Then earmark funds from this wallet toward it."
+            }
             action={
-              <Button size="sm" onClick={() => openForm(null)} disabled={!canSave}>
+              <Button size="sm" onClick={() => openForm(null)} disabled={!canSave} title={readOnlyReason ?? undefined}>
                 <Plus />
                 New goal
               </Button>
@@ -155,6 +162,7 @@ export function SavingsView() {
                   onSave={save}
                   onEdit={() => openForm(current)}
                   onDelete={() => remove(current.id)}
+                  readOnlyReason={readOnlyReason}
                 />
               )}
             </Panel>

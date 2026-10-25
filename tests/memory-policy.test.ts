@@ -3,7 +3,8 @@ import type { MemoryWriteConfig } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { MemoryKvStore, type Kv, type KvStore } from "@/lib/kv";
 import type { MemoryClient } from "@/modules/memory/memory.client";
-import { createWriteGuard } from "@/modules/memory/memory.policy";
+import { STRUCTURED_KINDS, writeAvailability } from "@/modules/memory/memory.capabilities";
+import { createWriteGuard, structuredPolicyKinds } from "@/modules/memory/memory.policy";
 import { MemoryService, type WriteInput } from "@/modules/memory/memory.service";
 
 const A = (n: string) => "0x" + n.repeat(64);
@@ -98,6 +99,14 @@ describe("structured-only policy (public demo)", () => {
     expect(await code(s.write(transfer({ extra: "field" })))).toBe("MEMORY_POLICY:403");
   });
 
+  it("accepts canonical generic coin types in transfer decisions", async () => {
+    const hex = (h: string) => "0x" + h.padStart(64, "0");
+    const lp = `${hex("5d")}::lp::LP<${hex("2")}::sui::SUI,${hex("db")}::usdc::USDC>`;
+    expect(await code(svc().write(transfer({ coinType: lp })))).toBe("ok");
+    expect(await code(svc().write(transfer({ coinType: `${lp} note` })))).toBe("MEMORY_POLICY:403");
+    expect(await code(svc().write(transfer({ coinType: lp.replace(",", ", ") })))).toBe("MEMORY_POLICY:403");
+  });
+
   it("does not restrict the local development mock", async () => {
     const s = svc({ cfg: { structuredOnly: false }, remote: false, kv: { store: new MemoryKvStore(), shared: false } });
     expect(await code(s.write({ ...feedback("a note"), kind: "note" }))).toBe("ok");
@@ -125,5 +134,36 @@ describe("memory write quotas", () => {
     expect(await code(svc({ client, kv: { store: down, shared: true } }).write(feedback()))).toBe("MEMORY_QUOTA:503");
     expect(await code(svc({ client, kv: { store: new MemoryKvStore(), shared: false } }).write(feedback()))).toBe("MEMORY_QUOTA:503");
     expect(writes).toHaveLength(0);
+  });
+});
+
+describe("client write availability (memory.capabilities)", () => {
+  const walrus = (enabled: boolean, structuredOnly: boolean) => ({ provider: "walrus" as const, writes: { enabled, structuredOnly } });
+
+  it("matches the server policy's structured kinds exactly", () => {
+    expect([...structuredPolicyKinds()].sort()).toEqual([...STRUCTURED_KINDS].sort());
+  });
+
+  it("disables goals and strategy settings under the public structured-only policy, with a reason", () => {
+    for (const kind of ["goal", "strategy"] as const) {
+      const r = writeAvailability(walrus(true, true), kind);
+      expect(r.allowed).toBe(false);
+      if (!r.allowed) expect(r.reason).toMatch(/not saved in this public demo/);
+    }
+    expect(writeAvailability(walrus(true, true), "security_feedback")).toEqual({ allowed: true });
+  });
+
+  it("explains read-only, disabled and unknown states", () => {
+    const ro = writeAvailability(walrus(false, true), "goal");
+    expect(!ro.allowed && ro.reason).toMatch(/read-only/);
+    const off = writeAvailability({ provider: "disabled", writes: { enabled: false, structuredOnly: false } }, "strategy");
+    expect(!off.allowed && off.reason).toMatch(/not configured/);
+    expect(writeAvailability(null, "goal").allowed).toBe(false);
+  });
+
+  it("allows everything on the local mock", () => {
+    for (const kind of ["goal", "strategy", "note"] as const) {
+      expect(writeAvailability({ provider: "mock", writes: { enabled: true, structuredOnly: false } }, kind)).toEqual({ allowed: true });
+    }
   });
 });

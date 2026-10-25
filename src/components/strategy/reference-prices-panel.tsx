@@ -30,10 +30,13 @@ export function ReferencePricesPanel({
   rows,
   settings,
   onSave,
+  saveDisabledReason = null,
 }: {
   rows: PriceRow[];
   settings: StrategySettings;
   onSave: (next: StrategySettings) => void;
+  /** Why settings cannot be saved in this deployment; null when they can. */
+  saveDisabledReason?: string | null;
 }) {
   const initial = () => Object.fromEntries(settings.referencePrices.map((r) => [r.coinType, r.priceUsd]));
   const [draft, setDraft] = useState<Record<string, string>>(initial);
@@ -72,11 +75,12 @@ export function ReferencePricesPanel({
       title="Reference prices"
       meta="Your assumptions in USD · not market prices"
       actions={
-        <Button size="sm" variant={dirty ? "default" : "outline"} onClick={savePrices} disabled={!dirty}>
+        <Button size="sm" variant={dirty ? "default" : "outline"} onClick={savePrices} disabled={!dirty || saveDisabledReason !== null} title={saveDisabledReason ?? undefined}>
           Save prices
         </Button>
       }
     >
+      {saveDisabledReason && <p className="border-b border-border px-4 py-2.5 text-xs text-subtle">{saveDisabledReason}</p>}
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -132,7 +136,7 @@ export function ReferencePricesPanel({
                       <span className={cn("text-xs", r.state === "priced" ? "text-muted-foreground" : r.state === "excluded" ? "text-subtle" : "text-warning")}>
                         {STATE_TEXT[excluded ? "excluded" : r.state]}
                       </span>
-                      <Button variant="ghost" size="xs" onClick={() => toggleExcluded(r.coinType)}>
+                      <Button variant="ghost" size="xs" onClick={() => toggleExcluded(r.coinType)} disabled={saveDisabledReason !== null} title={saveDisabledReason ?? undefined}>
                         {excluded ? "Include" : "Exclude"}
                       </Button>
                     </div>
