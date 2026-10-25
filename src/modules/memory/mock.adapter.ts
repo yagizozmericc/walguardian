@@ -8,7 +8,8 @@ import type { MemoryClient } from "./memory.client";
  * DEVELOPMENT MOCK — NOT WALRUS. Wraps the SDK's official `MemWalMock` (same
  * method names and result shapes as `MemWal`) and records writes in a local,
  * git-ignored JSON file so application restarts can be exercised. Expiry is
- * simulated (default ~4 weeks, about two Mainnet epochs); expired records stop
+ * simulated (default 28 days; the real lifetime is set by the relayer, ~6 weeks
+ * by default on Mainnet); expired records stop
  * being recalled, like blobs pruned by the relayer, but remain listed.
  * Selected only by MEMORY_PROVIDER=mock and labelled as mock everywhere.
  */

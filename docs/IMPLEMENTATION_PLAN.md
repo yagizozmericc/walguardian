@@ -558,6 +558,27 @@ A public marketing page at `/`. It sits outside the dashboard shell and loads no
 
 **Limits:** memory still runs on the development mock. Rate limits and caches are in-process, which assumes a single instance (see `docs/DEPLOYMENT.md`).
 
+### Phase 10: Reliable public deployment (in progress)
+
+Goal: Walguardian fully functional on Vercel, with persistent memory, before any new product features.
+
+**Owner decisions (2026-10-25):** A (Vercel env vars, configured by the owner) and E (Upstash Redis, free tier) approved. B (Walrus Mainnet account, created manually by the owner) approved. C (Walrus on Preview) approved in principle after verification. **D (Mainnet writes, shared seed) not approved yet.** F: the public demo persists only predefined structured decisions and security review feedback.
+
+**Done (local commits):**
+- *Shared limits* (`src/lib/kv.ts`, `rate-limit.ts`, `request-guard.ts`): Upstash Redis via REST (`KV_REST_API_URL`/`KV_REST_API_TOKEN`) with per-environment key prefixes. Fixed-window budgets per verified session and per IP, shared by all instances. Outage policy: reads degrade to stricter per-instance budgets, Gemini calls are denied (deterministic answer), writes fail closed.
+- *Global Tatum budget* (`tatum.budget.ts`): one requests-per-second counter for all instances, bounded waits.
+- *Shared caches*: address history (30 s, gzip) and coin metadata (1 day). Memory content is never cached in Redis.
+- *Memory write controls* (`memory.policy.ts`): write switch (Walrus read-only by default), structured-only policy with strict schemas, per-session and global quotas. The file mock is disabled on Vercel. `/api/status` reports Redis health and the write policy; the UI hides inputs that would be refused.
+- *Read-only Walrus verification* in `check:walrus` (network match, authenticated listing, expiry).
+- *Storage lifetime research*: records expire (relayer default ~6 weeks on Mainnet), no automatic renewal for SDK writes, only the account owner can extend. See `docs/WALRUS_INTEGRATION.md`.
+- *Tests*: unit tests for limits, outage policy, Tatum budget, caches, write policy and env parsing; a live Redis integration test (`npm run test:integration`) using an isolated, cleaned-up prefix.
+
+**Next:**
+1. Owner sets the Vercel variables; verify a Preview with live Testnet data, Redis connected, memory disabled.
+2. Owner creates the Walrus Mainnet account; run `check:walrus` read-only (locally, then on Preview with writes disabled).
+3. Request approval (D) for one synthetic Mainnet write, then decide on a shared synthetic seed.
+4. Production only with separate approval.
+
 ---
 
 ## 5. Environment variables
@@ -585,7 +606,7 @@ A public marketing page at `/`. It sits outside the dashboard shell and loads no
 
 | ID | Risk | Likelihood | Mitigation |
 |---|---|---|---|
-| **B1** | Walrus Memory Testnet relayer and dashboard have a broken TLS certificate (still broken on 2026-10-25). | **Open: awaiting owner confirmation.** The current instruction is mock-only with no Walrus writes; the earlier decision below is not yet in effect. | The owner authorized the **Walrus Memory Mainnet hosted relayer** for development and demos, with non-sensitive synthetic data only. Tatum stays on Testnet. Setup steps, required transactions, and env vars are in `docs/WALRUS_INTEGRATION.md`. |
+| **B1** | Walrus Memory Testnet relayer and dashboard have a broken TLS certificate (still broken on 2026-10-25). | **Decided (Phase 10).** Prepare the Mainnet hosted relayer with synthetic data only; read-only until Mainnet writes are approved. | The owner authorized the **Walrus Memory Mainnet hosted relayer** for development and demos, with non-sensitive synthetic data only. Tatum stays on Testnet. Setup steps, required transactions, and env vars are in `docs/WALRUS_INTEGRATION.md`. |
 | R1 | ~~Tatum's Testnet gRPC node may not serve the indexed `ListTransactions` API.~~ | **Resolved** | Verified working on 2026-10-24. |
 | R7 | The Tatum free-tier rate limit (HTTP 429 at a few requests per second) constrains history depth and refresh frequency. | Certain | Request spacer, backoff, bounded history (≤ 200 transactions for profiling), and short server-side caching. |
 | R8 | The node prunes history below checkpoint 314,252,673, so baselines only cover recent history. | Certain | Show the analysed window and lower confidence when it is short. |
@@ -640,3 +661,4 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | 8 Transfer check | Done | The simulation-only four-pillar assessment, pre-execution Protect adapter, gas and conservative Max, recipient lookup, decision recall, and grounded explanation are complete, with 223 tests passing. Live and browser runs were verified. |
 | 2026-10-24 | Landing page | Done | Public landing page at `/`; the Overview moved to `/dashboard`, with a redirect for `/?address=` links. Typecheck, lint, tests and build pass. Verified in a browser at desktop and mobile sizes; Lighthouse results are in the Landing page section. |
 | 2026-10-25 | 9 Demo and hardening | Done | Class-wide stablecoin reserve, security headers, request guard and rate limits, demo wallet, synthetic demo data (mock only), Overview command center, mobile layout fix, and the demo and deployment docs, with 237 tests passing. Walrus Testnet is still blocked on TLS, and an issue draft is prepared but not filed. The Walrus network decision is awaiting owner confirmation. |
+| 2026-10-25 | 10 Public deployment | In progress | Shared Redis limits, global Tatum budget, shared caches, memory write switch, quotas and structured-only policy, read-only Walrus verification, storage lifetime research; 264 unit tests passing. Waiting on Vercel env vars, the Walrus account, and approval for Mainnet writes. |

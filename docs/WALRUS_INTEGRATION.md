@@ -1,24 +1,38 @@
 # Walrus Memory: integration plan
 
-## Current status (2026-10-24, latest)
+## Current status (2026-10-25, latest)
 
-- **The application integration is implemented** (Phase 6) behind a provider-neutral client that mirrors the official SDK. It runs today on the **development mock** (`MEMORY_PROVIDER=mock`, the SDK's `MemWalMock` plus a local file). The mock is **not Walrus**.
-- **The Testnet relayer and dashboard** (`relayer-staging` and `staging.memory.walrus.xyz`) still serve a certificate for `*.up.railway.app`, so the SDK cannot connect. The docs list no other Testnet endpoint.
-- **Credentials.** The configured `MEMWAL_ACCOUNT_ID` was not found as an object on Testnet or on Mainnet (read-only lookups), and it is not an address with any activity. The delegate key has a valid format, but its registration cannot be confirmed.
-- **Owner decision (updated 2026-10-24).** Move memory to the **Walrus Memory Mainnet relayer**, with **non-sensitive synthetic data only**, so memory persists on hosted deployments (Vercel has no writable persistent disk for the mock). Tatum and all other blockchain data stay on Sui Testnet. The owner creates the account on the dashboard. Read-only checks run first; any write test needs separate approval.
-- *Previous decision:* Testnet first, develop on the mock, no Mainnet. The Testnet relayer still fails TLS (re-checked 2026-10-24).
+- **Owner decisions (Phase 10).** Prepare the **Mainnet hosted relayer** (`https://relayer.memory.walrus.xyz`) with **synthetic data only**. The mock stays the default locally; memory stays disabled on Vercel until the Walrus checks pass. The owner creates the account manually on the dashboard (B, approved). Walrus on Preview is approved in principle after verification (C). **Mainnet writes are not approved yet (D)**: the first synthetic write and any shared seed need explicit approval. Production needs a separate approval.
+- **Safety controls implemented** (`src/modules/memory/memory.policy.ts`, enforced in `MemoryService.write`): Walrus is read-only unless `MEMORY_WRITES_ENABLED=true`; a structured-only policy accepts only predefined decisions and security review verdicts (no free text, goals or notes); per-session and global daily quotas on Redis, failing closed if Redis is down. See `docs/DEPLOYMENT.md`.
+- **Read-only verification** is ready: `npm run check:walrus` checks the relayer's reported network against the configuration, validates credentials with an authenticated listing (`health()` does not check credentials), and prints record expiry. No credentials are configured yet, so it has not run against Mainnet.
 - **No memory writes and no transactions have been made** on any Walrus network.
+- **Testnet** relayer and dashboard still fail TLS (re-checked 2026-10-25). The owner has handled this separately; the draft is kept in `docs/issues/walrus-staging-tls.md`.
+
+### Storage lifetime and renewal (verified 2026-10-25)
+
+Sources: docs.wal.app/walrus-memory (manage-your-memory, funding-storage, tracking-agent-storage, public-relayer) and the MystenLabs/MemWal source at `df2c300` (2026-10-24). Source defaults may differ from the hosted deployment's configuration; each record's real expiry is visible through `listMemories().expires_at`.
+
+| Question | Finding |
+|---|---|
+| How long does a record last? | The epochs paid at upload. A Mainnet epoch is about 2 weeks. The relayer sidecar defaults to **3 epochs on Mainnet** (~6 weeks; 5 on Testnet), overridable by the operator via `WALRUS_STORAGE_EPOCHS` up to 15. |
+| Who pays? | The hosted relayer pays WAL storage and SUI gas for relayed writes; account holders pay nothing. Usage limits apply (values undisclosed); no SLA. |
+| Is it renewed automatically? | **No, as far as the source shows.** Only console uploads renew automatically; the relayer source has no renewal job for SDK writes. |
+| Who can renew? | After upload, the relayer transfers the `Blob` object to the **account owner's address** (`setMetadataAndTransferBlobs`). Only the owner can extend it, with an owner-signed transaction paying WAL and SUI. |
+| After expiry? | Walrus drops the blob. It **cannot be recovered or renewed**. |
+| Permanent? | **No.** Walguardian never describes Walrus records as permanent. |
+
+**Implication for the demo:** synthetic demo records written before judging remain for roughly six weeks unless the hosted relayer is configured otherwise. If they lapse, they must be re-seeded, which is a Mainnet write needing approval.
 
 ### Switching to a live relayer (when available)
 
 1. Create the account on the dashboard **for the chosen network**. The Testnet dashboard is separate from Mainnet.
 2. In `.env`, set:
    - `MEMORY_PROVIDER=walrus`
-   - `MEMWAL_SERVER_URL` (the Testnet staging URL)
+   - `MEMWAL_SERVER_URL` (`https://relayer.memory.walrus.xyz` for Mainnet, with `ALLOW_WALRUS_MAINNET=true`)
    - `MEMWAL_ACCOUNT_ID` and `MEMWAL_PRIVATE_KEY` from that dashboard
    - keep `SESSION_SECRET`
 3. Run `npm run check:walrus`. It is read-only: configuration, health, listing.
-4. With approval: `CONFIRM_WALRUS_TEST_WRITE=yes npm run check:walrus -- --write-test` (one synthetic record).
+4. With approval: `MEMORY_WRITES_ENABLED=true CONFIRM_WALRUS_TEST_WRITE=yes npm run check:walrus -- --write-test` (one synthetic record; also needs the Redis variables for quotas).
 5. A Mainnet relayer additionally needs `ALLOW_WALRUS_MAINNET=true` and explicit approval.
 
 ---
@@ -45,7 +59,7 @@ Sources: docs.wal.app/walrus-memory, the MystenLabs/MemWal source, the installed
 | Request auth | Each request is signed over the timestamp, method, path, body hash, nonce, and account ID. Clock skew must stay within 300 s, and each nonce can be used only once. |
 | Write semantics | `remember` → job states `pending`, `running`, `uploaded`, `done`, or `failed`. `done` means the record is stored on Walrus and indexed, and returns `{ id, blob_id, owner, namespace }`. Jobs can run for a long time under congestion; on timeout, poll the same `job_id` rather than resubmitting. Explicit idempotency keys prevent duplicates. |
 | Read semantics | `recall({ query, namespace, limit, sort: "recent" })` → `{ blob_id, text, distance, created_at }`. `listMemories` returns metadata only (`memory_id`, `blob_id`, `created_at`, `status`, `expires_at`, …). |
-| Retention | The relayer's default upload lifetime is **about 2 epochs (~4 weeks) on Mainnet**. Expired blobs cannot be recovered. *Unverified:* whether the managed relayer renews blobs automatically. |
+| Retention | *Superseded 2026-10-25:* the relayer source defaults to **3 epochs (~6 weeks) on Mainnet**, with no automatic renewal for SDK writes. See *Storage lifetime and renewal* above. Expired blobs cannot be recovered. |
 | Deletion | The SDK has no delete call. A separate Security Delete flow requires an owner-wallet signature and is permanent. |
 | Privacy | Blobs on Walrus are SEAL-encrypted. The **relayer sees plaintext** and the embeddings. One delegate key can read every namespace in the account. Namespaces organise data; they are not a security boundary. |
 
