@@ -1,4 +1,6 @@
 import "server-only";
+import { gunzipSync, gzipSync } from "node:zlib";
+import { getKv } from "@/lib/kv";
 import { logger } from "@/lib/logger";
 import type { ChainInfo, DataSource, NormalizedTransaction, RawBalance } from "@/modules/blockchain/blockchain.types";
 import type { SuiTatumProvider } from "@/modules/blockchain/sui.adapter";
@@ -71,6 +73,46 @@ async function load(provider: SuiTatumProvider, address: string, max: number): P
   };
 }
 
+/**
+ * Shared second-level cache (Redis) so every instance reuses a recent load.
+ * Stored gzip-compressed (a 200-transaction history is ~340 KB of JSON, ~26 KB
+ * compressed). Cache failures never fail a request; `source.fetchedAt` keeps
+ * the original fetch time, so freshness shown to the user stays accurate.
+ */
+const sharedKey = (address: string, max: number) => `hist:v1:${address}:${max}`;
+
+async function readShared(address: string, max: number): Promise<AddressHistory | null> {
+  const { store, shared } = getKv();
+  if (!shared) return null;
+  try {
+    const packed = await store.get<string>(sharedKey(address, max));
+    return packed ? (JSON.parse(gunzipSync(Buffer.from(packed, "base64")).toString("utf8")) as AddressHistory) : null;
+  } catch (err) {
+    logger.warn("kv.history_read_failed", { message: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
+async function writeShared(address: string, max: number, value: AddressHistory): Promise<void> {
+  const { store, shared } = getKv();
+  if (!shared) return;
+  try {
+    await store.set(sharedKey(address, max), gzipSync(JSON.stringify(value)).toString("base64"), CACHE_TTL_MS / 1000);
+  } catch (err) {
+    logger.warn("kv.history_write_failed", { message: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+async function loadCached(provider: SuiTatumProvider, address: string, max: number, fresh: boolean): Promise<AddressHistory> {
+  if (!fresh) {
+    const hit = await readShared(address, max);
+    if (hit) return hit;
+  }
+  const value = await load(provider, address, max);
+  await writeShared(address, max, value);
+  return value;
+}
+
 /** Recent contiguous history plus balances for an address, cached briefly to respect rate limits. */
 export function getAddressHistory(
   provider: SuiTatumProvider,
@@ -81,7 +123,7 @@ export function getAddressHistory(
   const key = `${address}:${max}`;
   const hit = cache.get(key);
   if (!opts.fresh && hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
-  const value = load(provider, address, max);
+  const value = loadCached(provider, address, max, opts.fresh ?? false);
   cache.set(key, { at: Date.now(), value });
   value.catch(() => cache.delete(key));
   return value;

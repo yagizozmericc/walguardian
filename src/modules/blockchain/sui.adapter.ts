@@ -44,6 +44,29 @@ const MAX_BALANCE_PAGES = 5;
 const MAX_SCAN_ROUNDS = 4;
 export const MAX_TX_PAGE = 100;
 
+/** Coin metadata rarely changes; share it across instances for a day. Cache failures are ignored. */
+const METADATA_TTL_S = 86_400;
+
+async function readSharedMetadata(coinType: string): Promise<CoinMetadata | null> {
+  const { store, shared } = getKv();
+  if (!shared) return null;
+  try {
+    return await store.get<CoinMetadata>(`meta:v1:${coinType}`);
+  } catch {
+    return null;
+  }
+}
+
+async function writeSharedMetadata(coinType: string, meta: CoinMetadata): Promise<void> {
+  const { store, shared } = getKv();
+  if (!shared) return;
+  try {
+    await store.set(`meta:v1:${coinType}`, meta, METADATA_TTL_S);
+  } catch {
+    // A cache miss next time is harmless.
+  }
+}
+
 /** Sui blockchain provider backed by Tatum's Sui gRPC gateway. */
 export class SuiTatumProvider implements BlockchainProvider {
   private readonly metadataCache = new Map<string, CoinMetadata>();
@@ -110,6 +133,11 @@ export class SuiTatumProvider implements BlockchainProvider {
     const key = normalizeCoinType(coinType);
     const cached = this.metadataCache.get(key);
     if (cached) return cached;
+    const shared = await readSharedMetadata(key);
+    if (shared) {
+      this.metadataCache.set(key, shared);
+      return shared;
+    }
     let meta: CoinMetadata;
     try {
       meta = normalizeCoinInfo(key, await this.client.unary("state", "GetCoinInfo", { coin_type: key }));
@@ -119,6 +147,7 @@ export class SuiTatumProvider implements BlockchainProvider {
       meta = { coinType: key, symbol: "SUI", name: "Sui", decimals: SUI_DECIMALS };
     }
     this.metadataCache.set(key, meta);
+    await writeSharedMetadata(key, meta);
     return meta;
   }
 
