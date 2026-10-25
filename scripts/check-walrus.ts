@@ -2,6 +2,7 @@
  * Memory provider check. Read-only by default.
  *
  *   npm run check:walrus                       # config, relayer network, health, authenticated listing (no writes)
+ *   npm run check:walrus -- --recall-probe     # also one recall (read-only; exercises the relayer's embedding service)
  *   CONFIRM_WALRUS_TEST_WRITE=yes npm run check:walrus -- --write-test
  *                                              # one synthetic record: write, wait, recall
  *
@@ -40,6 +41,18 @@ async function main() {
   const listed = await client.listMemories({ namespace: service.namespace("reasoning") });
   console.log(`credentials accepted: check namespace holds ${listed.memories.length} record(s)`);
   for (const m of listed.memories.slice(0, 5)) console.log(`  ${m.blob_id.slice(0, 12)}… created ${m.created_at}, expires ${m.expires_at ?? "unknown"} (${m.status})`);
+
+  if (process.argv.includes("--recall-probe")) {
+    // Read-only, but exercises the relayer's embedding service (the part affected by walrus-memory#1285/#1286).
+    const started = Date.now();
+    try {
+      const r = await client.recall({ query: "guardian connectivity check", namespace: service.namespace("reasoning"), limit: 1 });
+      console.log(`recall probe: ok (${r.results.length} result(s), ${Date.now() - started} ms)`);
+    } catch (err) {
+      console.log(`recall probe: FAILED after ${Date.now() - started} ms: ${err instanceof AppError ? `${err.code}: ${err.message}` : String(err)}`);
+      process.exitCode = 1;
+    }
+  }
 
   if (!process.argv.includes("--write-test")) {
     console.log("read-only check complete (pass --write-test to write one synthetic record)");

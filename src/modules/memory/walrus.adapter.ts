@@ -11,12 +11,20 @@ import type { MemoryClient } from "./memory.client";
 
 const REMEMBER_TIMEOUT_MS = 120_000;
 
-function mapError(err: unknown, op: string): ProviderError {
+export function mapError(err: unknown, op: string): ProviderError {
   const msg = err instanceof Error ? err.message : String(err);
+  // The relayer's own embedding provider can fail (including with a 401 from its shared credential;
+  // walrus-memory#1285/#1286). That is a relayer-side outage, not a problem with our credentials.
+  if (/embedding|embed api|upstream inference/i.test(msg)) {
+    return new ProviderError("walrus", "PROVIDER_UNAVAILABLE", `The Walrus Memory relayer's embedding service is failing during ${op}; this is on the relayer side. Try again later.`, true);
+  }
   if (/\b401\b|unauthori[sz]ed|signature/i.test(msg)) return new ProviderError("walrus", "PROVIDER_UNAUTHORIZED", `Walrus Memory rejected the credentials during ${op}.`);
   if (/\b429\b|rate limit/i.test(msg)) return new ProviderError("walrus", "PROVIDER_RATE_LIMITED", `Walrus Memory rate limit reached during ${op}.`, true);
   if (/timeout|timed out|abort|ECONN|ENOTFOUND|certificate|fetch failed/i.test(msg)) {
     return new ProviderError("walrus", "PROVIDER_UNAVAILABLE", `Walrus Memory relayer unavailable during ${op}: ${msg.slice(0, 160)}`, true);
+  }
+  if (/\b50[0-4]\b|server error|internal error/i.test(msg)) {
+    return new ProviderError("walrus", "PROVIDER_UNAVAILABLE", `The Walrus Memory relayer returned a server error during ${op}. Try again later.`, true);
   }
   return new ProviderError("walrus", "PROVIDER_ERROR", `Walrus Memory ${op} failed: ${msg.slice(0, 160)}`);
 }

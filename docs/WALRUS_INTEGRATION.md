@@ -8,7 +8,20 @@
 - **No memory writes and no transactions have been made** on any Walrus network.
 - **Testnet** relayer and dashboard still fail TLS (re-checked 2026-10-25). The owner has handled this separately; the draft is kept in `docs/issues/walrus-staging-tls.md`.
 
-### Storage lifetime and renewal (verified 2026-10-25)
+### Known Mainnet relayer issues (checked 2026-10-25)
+
+The SDK repository moved to `MystenLabs/walrus-memory`. Open reports affecting the hosted Mainnet relayer:
+
+| Issue | Symptom | Maintainer status |
+|---|---|---|
+| [#1285](https://github.com/MystenLabs/walrus-memory/issues/1285) | `/api/recall`, `/api/embed`, `/api/analyze` return opaque HTTP 500 when the relayer's upstream embedding inference degrades (`/health` showed `writes: degraded`). Storage, `listMemories` and `restore` keep working. | Open. Tracked internally as WALM-874 with WALM-829 and WALM-748. `recallManual()` deliberately does not decrypt server-side; `MemWalManual` is the bring-your-own-embedding path. |
+| [#1286](https://github.com/MystenLabs/walrus-memory/issues/1286) | Recall returns HTTP 500; accepted `remember` jobs later fail with `Embedding API error (401 Unauthorized): User not found`. | Open. A maintainer confirmed the 401 comes from the relayer's shared embedding credential, not from user accounts. No fix confirmed yet. |
+
+At the time of checking, `/health` reported `status: ok`, `writes: ok` (build `48e743b`), but `/health` does not exercise embedding.
+
+**Impact on Walguardian:** reading memory records uses `recall` (embedding-dependent), so an embedding outage makes memory reads fail; the app shows an explicit error and never substitutes data. Writes wait for the job to finish with a blob ID, so a job that fails during embedding is reported as not saved. Relayer embedding failures and 5xx responses are classified as a retryable relayer outage, not as a credential problem. `npm run check:walrus -- --recall-probe` exercises embedding with one read-only recall.
+
+
 
 Sources: docs.wal.app/walrus-memory (manage-your-memory, funding-storage, tracking-agent-storage, public-relayer) and the MystenLabs/MemWal source at `df2c300` (2026-10-24). Source defaults may differ from the hosted deployment's configuration; each record's real expiry is visible through `listMemories().expires_at`.
 
