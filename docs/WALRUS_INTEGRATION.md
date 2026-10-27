@@ -6,7 +6,7 @@
 - **Safety controls implemented** (`src/modules/memory/memory.policy.ts`, enforced in `MemoryService.write`): Walrus is read-only unless `MEMORY_WRITES_ENABLED=true`; a structured-only policy accepts only predefined decisions and security review verdicts (no free text, goals or notes); per-session and global daily quotas on Redis, failing closed if Redis is down. See `docs/DEPLOYMENT.md`.
 - **Read-only verification passed (2026-10-25)** against the Mainnet relayer: credentials accepted, authenticated listing and recall (embedding) work. The first attempt failed because `MEMWAL_ACCOUNT_ID` held the owner's wallet address; it now holds the MemWalAccount object. Tool: `npm run check:walrus` checks the relayer's reported network against the configuration, validates credentials with an authenticated listing (`health()` does not check credentials), and prints record expiry. No credentials are configured yet, so it has not run against Mainnet.
 - **No memory writes and no transactions have been made** on any Walrus network.
-- **Testnet** relayer and dashboard still fail TLS (re-checked 2026-10-25). The owner has handled this separately; the draft is kept in `docs/issues/walrus-staging-tls.md`.
+- **Testnet endpoints changed (2026-10-27).** Walrus retired the staging hosts (`relayer-staging.memory.walrus.xyz`, `staging.memory.walrus.xyz`; fixed upstream in walrus-memory PR #1321). Testnet is now relayer `https://relayer.dev.memwal.ai` and dashboard `https://dev.memwal.ai`. Verified read-only: valid certificates for both hostnames, relayer `/health` ok and `/config` reports `network: testnet` (package `0x0a62…265c`). The app refuses the retired URL with the replacement named. Testnet needs its own account (accounts are per network); none exists yet.
 
 ### Known Mainnet relayer issues (checked 2026-10-25)
 
@@ -38,10 +38,10 @@ Sources: docs.wal.app/walrus-memory (manage-your-memory, funding-storage, tracki
 
 ### Switching to a live relayer (when available)
 
-1. Create the account on the dashboard **for the chosen network**. The Testnet dashboard is separate from Mainnet.
+1. Create the account on the dashboard **for the chosen network**: Mainnet `https://memory.walrus.xyz`, Testnet `https://dev.memwal.ai`. Accounts and credentials are separate per network.
 2. In `.env`, set:
    - `MEMORY_PROVIDER=walrus`
-   - `MEMWAL_SERVER_URL` (`https://relayer.memory.walrus.xyz` for Mainnet, with `ALLOW_WALRUS_MAINNET=true`)
+   - `MEMWAL_SERVER_URL`: `https://relayer.memory.walrus.xyz` for Mainnet (with `ALLOW_WALRUS_MAINNET=true`), or `https://relayer.dev.memwal.ai` for Testnet
    - `MEMWAL_ACCOUNT_ID` and `MEMWAL_PRIVATE_KEY` from that dashboard. The account ID is the **MemWalAccount object ID**, not the owner's wallet address; `check:walrus` checks this onchain (read-only) and names the correct object if the owner address was used.
    - keep `SESSION_SECRET`
 3. Run `npm run check:walrus`. It is read-only: configuration, health, listing.

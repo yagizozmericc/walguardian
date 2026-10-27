@@ -12,8 +12,8 @@ const REMEMBERS = [
 
 const STATUS = [
   { label: "Integration", value: "Built on the official Walrus Memory SDK behind a provider-neutral memory layer.", dot: "bg-positive" },
-  { label: "This demo", value: "Runs on a clearly labelled development mock. The mock is not Walrus.", dot: "bg-warning" },
-  { label: "Live persistence", value: "Pending a reachable Walrus Memory Testnet relayer. Not yet verified end-to-end.", dot: "bg-subtle" },
+  { label: "This demo", value: "No memories are stored in the public demo yet. Local development uses a clearly labelled mock, which is not Walrus.", dot: "bg-warning" },
+  { label: "Live persistence", value: "Read access to Walrus Mainnet is verified in development. Writing memories is not enabled yet.", dot: "bg-subtle" },
 ];
 
 function Moment({ label, date, children }: { label: string; date: string; children: React.ReactNode }) {

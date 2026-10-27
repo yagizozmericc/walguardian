@@ -46,6 +46,7 @@ Sources: [SDK overview](https://docs.wal.app/walrus-memory/sdk/overview), [Quick
 | Package | `@mysten-incubation/memwal` 0.1.9. Relayer mode needs the `@mysten/sui` and `@mysten/seal` peer dependencies, because the SDK builds a SEAL SessionKey on the client. |
 | Testnet support | Yes, on paper: the Testnet relayer is `https://relayer-staging.memory.walrus.xyz` and the dashboard is `staging.memory.walrus.xyz`. |
 | **Testnet availability (2026-10-24)** | **Broken.** Both staging hosts serve a TLS certificate for `*.up.railway.app`, and the hostname does not match. Every SDK call fails TLS verification. The Mainnet relayer `relayer.memory.walrus.xyz/health` returns `ok`. **This is blocker B1.** |
+| **Testnet endpoints (2026-10-27)** | Staging retired by Walrus (PR #1321). Testnet relayer `https://relayer.dev.memwal.ai`, dashboard `https://dev.memwal.ai`; verified read-only (TLS, `network: testnet`). |
 | Auth | Ed25519 **delegate key** (`MEMWAL_PRIVATE_KEY`) plus a `MemWalAccount` object ID (`MEMWAL_ACCOUNT_ID`). Every request is signed with a 5-minute timestamp window and a nonce. |
 | Write | `remember(text, namespace)` accepts the write as an async job. `rememberAndWait` / `waitForRememberJob` resolves to `{ id, blob_id, owner, namespace }`. Idempotency keys are supported. A write counts as successful only when the job reaches `done` with a `blob_id`. |
 | Read | `recall({ query, namespace, limit ≤ 100, sort: "relevance" | "recent", maxDistance })` returns `{ blob_id, text, distance, created_at }` in decrypted plaintext. |
@@ -594,7 +595,7 @@ Goal: Walguardian fully functional on Vercel, with persistent memory, before any
 | `TATUM_SUI_GRPC_ENDPOINT` | 2 | Default `sui-testnet-grpc.gateway.tatum.io:443`. |
 | `MEMWAL_PRIVATE_KEY` | 6 | Delegate key (hex). Never the owner key. Server-only. |
 | `MEMWAL_ACCOUNT_ID` | 6 | `MemWalAccount` object ID. |
-| `MEMWAL_SERVER_URL` | 6 | Default `https://relayer-staging.memory.walrus.xyz` (Testnet). |
+| `MEMWAL_SERVER_URL` | 6 | Testnet `https://relayer.dev.memwal.ai` (since 2026-10-27; the staging host is retired) or Mainnet `https://relayer.memory.walrus.xyz`. |
 | `MEMWAL_NAMESPACE_PREFIX` | 6 | Default `guardian`. |
 | `SESSION_SECRET` | 6 | 32+ random bytes for signing session cookies. |
 | `ANTHROPIC_API_KEY` | 7 | LLM provider key. Server-only. |
@@ -606,7 +607,7 @@ Goal: Walguardian fully functional on Vercel, with persistent memory, before any
 
 | ID | Risk | Likelihood | Mitigation |
 |---|---|---|---|
-| **B1** | Walrus Memory Testnet relayer and dashboard have a broken TLS certificate (still broken on 2026-10-25). | **Decided (Phase 10).** Prepare the Mainnet hosted relayer with synthetic data only; read-only until Mainnet writes are approved. | The owner authorized the **Walrus Memory Mainnet hosted relayer** for development and demos, with non-sensitive synthetic data only. Tatum stays on Testnet. Setup steps, required transactions, and env vars are in `docs/WALRUS_INTEGRATION.md`. |
+| **B1** | ~~Walrus Memory Testnet relayer and dashboard have a broken TLS certificate.~~ Resolved 2026-10-27: staging retired, Testnet moved to `relayer.dev.memwal.ai`. | **Decided (Phase 10).** Prepare the Mainnet hosted relayer with synthetic data only; read-only until Mainnet writes are approved. | The owner authorized the **Walrus Memory Mainnet hosted relayer** for development and demos, with non-sensitive synthetic data only. Tatum stays on Testnet. Setup steps, required transactions, and env vars are in `docs/WALRUS_INTEGRATION.md`. |
 | R1 | ~~Tatum's Testnet gRPC node may not serve the indexed `ListTransactions` API.~~ | **Resolved** | Verified working on 2026-10-24. |
 | R7 | The Tatum free-tier rate limit (HTTP 429 at a few requests per second) constrains history depth and refresh frequency. | Certain | Request spacer, backoff, bounded history (≤ 200 transactions for profiling), and short server-side caching. |
 | R8 | The node prunes history below checkpoint 314,252,673, so baselines only cover recent history. | Certain | Show the analysed window and lower confidence when it is short. |
@@ -662,3 +663,4 @@ Demo fixtures (recorded responses used only in unit tests) live in `tests/fixtur
 | 2026-10-24 | Landing page | Done | Public landing page at `/`; the Overview moved to `/dashboard`, with a redirect for `/?address=` links. Typecheck, lint, tests and build pass. Verified in a browser at desktop and mobile sizes; Lighthouse results are in the Landing page section. |
 | 2026-10-25 | 9 Demo and hardening | Done | Class-wide stablecoin reserve, security headers, request guard and rate limits, demo wallet, synthetic demo data (mock only), Overview command center, mobile layout fix, and the demo and deployment docs, with 237 tests passing. Walrus Testnet is still blocked on TLS, and an issue draft is prepared but not filed. The Walrus network decision is awaiting owner confirmation. |
 | 2026-10-25 | 10 Public deployment | In progress | Shared Redis limits, global Tatum budget, shared caches, memory write switch, quotas and structured-only policy, read-only Walrus verification, storage lifetime research; 264 unit tests passing. Waiting on Vercel env vars, the Walrus account, and approval for Mainnet writes. |
+| 2026-10-27 | Walrus endpoints | Done | Retired staging URLs replaced with `relayer.dev.memwal.ai` / `dev.memwal.ai`; retired URL refused with the replacement named; new Testnet relayer verified read-only. Mainnet unchanged. SDK stays on 0.1.9 (0.1.10 has no endpoint changes). |

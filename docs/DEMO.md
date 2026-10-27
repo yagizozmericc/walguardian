@@ -101,7 +101,7 @@ To start from a clean slate, use a fresh browser profile (new session cookie) or
 
 ## Known limitations
 
-- **Memory runs on the development mock, not Walrus.** The Walrus Testnet relayer and dashboard serve a mismatched TLS certificate (re-checked 2026-10-25; see `docs/issues/walrus-staging-tls.md`, an unpublished draft). The `walrus` provider is implemented against the official SDK but has not been verified live. Do not describe demo records as stored on Walrus.
+- **The local scripted demo runs on the development mock, not Walrus.** Walrus Mainnet read access is verified (authentication, listing, recall), but writing is not enabled, so no demo record is stored on Walrus. Do not describe demo records as stored on Walrus.
 - The mock persists to a local file and simulates the 28-day expiry. It assumes one long-running Node process (see `docs/DEPLOYMENT.md`).
 - Testnet assets have no market price. All fiat figures use reference prices the user enters.
 - Protect is historical analysis with manual refresh. It does not monitor in real time and cannot block transactions in external wallets.

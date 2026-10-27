@@ -3,6 +3,8 @@ DRAFT — not published. Intended for https://github.com/MystenLabs/MemWal/issue
 Review before filing. Contains no credentials, account IDs or user data.
 -->
 
+> **Resolved 2026-10-27.** Walrus confirmed the staging environments were retired and replaced: Testnet relayer `https://relayer.dev.memwal.ai`, dashboard `https://dev.memwal.ai` (walrus-memory PR #1321). Kept for reference only.
+
 # Testnet (staging) relayer and dashboard serve a `*.up.railway.app` certificate
 
 ## Summary

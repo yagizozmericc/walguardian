@@ -132,7 +132,7 @@ Verified from the Walrus Memory docs and the relayer source (MystenLabs/MemWal `
 | Production env vars unset | The deployed app cannot load wallet data | Owner configures (approved A) |
 | Walrus Mainnet account | Needed for read-only verification | Owner creates via the dashboard (approved B) |
 | Walrus on Preview | Read-only check, then writes | C approved in principle after verification; D (writes) not yet approved |
-| Walrus Testnet relayer TLS | Testnet unusable | Handled by the owner separately; draft kept in `docs/issues/` |
+| Walrus Testnet account | Testnet available for development via `https://relayer.dev.memwal.ai` (staging retired; verified read-only 2026-10-27) | A Testnet account is needed on `https://dev.memwal.ai` |
 | Walrus record expiry | Demo records lapse after the paid period (~6 weeks by default) | Documented; re-seed before judging if needed |
 | Relayer usage limits | Undisclosed; no SLA | Our quotas keep usage low |
 | Gemini and Tatum free tiers | Quotas and rate limits | Shared budgets; deterministic fallback |
