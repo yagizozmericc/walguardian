@@ -588,6 +588,19 @@ It does not automatically execute transactions or block transactions initiated i
 - **Findings and verdict.** Each finding is categorised as a fact, historical pattern, preference/decision, or unknown. The verdict follows a fixed precedence, and its wording never claims safety or success.
 - **Explanation.** The explanation recomputes the assessment on the server and reuses the grounded LLM step. It cannot alter the verdict.
 
+### Wallet-signed execution (2026-10-27)
+
+When the analysed address is the connected wallet's account, the transfer check becomes a real pre-signing check.
+
+1. **Prepare** (`POST /api/transactions/transfer/prepare`). The server runs the unified assessment, then builds the transfer with `@mysten/sui` (`coinWithBalance` + `transferObjects`) and simulates it with `SimulateTransaction`. Both go through Tatum's gRPC gateway. Tatum rejects grpc-web, so `modules/blockchain/sui.sdk.ts` gives `SuiGrpcClient` a `@grpc/grpc-js` transport (`@protobuf-ts/grpc-transport`) that shares the read adapter's spacer, shared budget and retries.
+2. **Interpret** (`modules/execution/simulation.ts`, pure and tested). The simulated balance changes must be exactly the request: the recipient gains the amount, the sender loses the amount plus net gas (gas in SUI only), and nothing else moves. The signing policy blocks on insufficient balance, build or simulation failure, a mocked gas coin, or an intent mismatch. Critical findings, a `review_carefully` verdict, or high Protect severity require an explicit acknowledgement. Memory and feedback never remove that acknowledgement. A successful node simulation supersedes the historical gas estimate.
+3. **Sign.** The browser passes the built BCS bytes to the wallet through the Wallet Standard (`@mysten/wallet-standard`, `sui:signTransaction`), so the wallet cannot re-resolve gas or inputs. If the wallet returns different bytes, nothing is sent.
+4. **Execute** (`POST /api/transactions/execute`). Prepare issues an HMAC ticket (`modules/execution/ticket.ts`, keyed with the Tatum API key, 10-minute TTL) that binds the digest to the sender. Execute recomputes the digest from the submitted bytes, checks the sender and the ticket, then calls `ExecuteTransaction` through Tatum. The endpoint therefore broadcasts only transactions Guardian assessed and is not a general relay.
+
+Verified live on Tatum Testnet on 2026-10-27: build, simulation (node gas and balance changes), and `ExecuteTransaction` routing, with an invalid signature rejected by the node. A real broadcast was not run, because the public faucet refuses scripted requests and no funded test key was available.
+
+Limits: only plain single-asset transfers are built. Connecting a wallet does not change memory access, which is still keyed to the signed session cookie. Transfers made in the wallet itself or in other dApps are not seen.
+
 ## 13. Application Database
 
 Use PostgreSQL for operational application state when needed.
@@ -641,6 +654,8 @@ Suggested endpoints:
 | PATCH | `/api/goals/:id` | Update savings goal |
 | GET | `/api/strategy` | Allocation assessment |
 | POST | `/api/assessments/transfer` | Unified transaction assessment |
+| POST | `/api/transactions/transfer/prepare` | Assess, build and simulate a transfer for a connected wallet |
+| POST | `/api/transactions/execute` | Broadcast wallet-signed bytes Guardian prepared |
 | POST | `/api/copilot` | AI conversation |
 | GET | `/api/memory` | Authorized memory history |
 
@@ -779,6 +794,10 @@ No autonomous transaction execution in the MVP.
 **ADR-007: Evidence-Based Recommendations**
 
 Every security finding and financial recommendation must be traceable to current blockchain data, deterministic calculations, or retrieved user memories.
+
+**ADR-008: User-Signed Execution Through Guardian-Built Transactions**
+
+Guardian may build and broadcast a transaction only when the user's own wallet signs the exact bytes Guardian simulated and assessed. Guardian holds no keys, never signs, and does not claim to intercept transactions initiated elsewhere. This refines ADR-006: execution is always human-authorized.
 
 ## 19. Open Technical Questions
 

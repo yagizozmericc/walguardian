@@ -5,22 +5,30 @@ import { PageContainer, PageHeader, Panel } from "@/components/common/page";
 import { EmptyState, ErrorState, TableSkeleton, type DisplayError } from "@/components/common/states";
 import { fetchJson, toDisplayError, useApiResource } from "@/components/common/use-api-resource";
 import { Answer } from "@/components/layout/copilot-panel";
+import { useWallet } from "@/components/providers/wallet-context";
 import { useWatchAddress } from "@/components/providers/watch-context";
 import { Button } from "@/components/ui/button";
 import { knownAssets } from "@/modules/portfolio/assets";
 import type { PortfolioSnapshot } from "@/modules/portfolio/portfolio.types";
 import type { CopilotResponse } from "@/modules/ai/ai.types";
 import type { TransferAssessment } from "@/modules/assessment/transfer.types";
+import type { ExecutionResult, PreparedTransfer } from "@/modules/execution/execution.types";
 import { AssessForm, type AssetOption, type TransferInput } from "./assess-form";
 import { DecisionForm, FindingsByCategory, PillarPanels, VerdictBand } from "./assessment-result";
+import { SignPanel, type ExecutionState } from "./sign-panel";
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
 export function AssessView() {
   const { address } = useWatchAddress();
+  const wallet = useWallet();
+  // Signing is offered only when the analysed address is the connected wallet's account.
+  const live = Boolean(address && wallet.account?.address === address);
   const portfolio = useApiResource<PortfolioSnapshot>(address ? `/api/portfolio/${address}?limit=1` : null);
   const [input, setInput] = useState<TransferInput | null>(null);
   const [result, setResult] = useState<TransferAssessment | null>(null);
+  const [prepared, setPrepared] = useState<PreparedTransfer | null>(null);
+  const [execution, setExecution] = useState<ExecutionState>({ phase: "idle" });
   const [error, setError] = useState<DisplayError | null>(null);
   const [pending, setPending] = useState(false);
   const [explain, setExplain] = useState<{ pending: boolean; response: CopilotResponse | null; error: DisplayError | null }>({ pending: false, response: null, error: null });
@@ -40,13 +48,44 @@ export function AssessView() {
     setError(null);
     setExplain({ pending: false, response: null, error: null });
     setDecision({ saving: false, saved: false, error: null });
-    fetchJson<TransferAssessment>("/api/assessments/transfer", undefined, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ address, ...next }) })
+    setExecution({ phase: "idle" });
+    const body = JSON.stringify({ address, ...next });
+    const request = live
+      ? fetchJson<PreparedTransfer>("/api/transactions/transfer/prepare", undefined, { method: "POST", headers: JSON_HEADERS, body }).then((p) => {
+          setPrepared(p);
+          return p.assessment;
+        })
+      : fetchJson<TransferAssessment>("/api/assessments/transfer", undefined, { method: "POST", headers: JSON_HEADERS, body }).then((a) => {
+          setPrepared(null);
+          return a;
+        });
+    request
       .then(setResult)
       .catch((err) => {
         setResult(null);
+        setPrepared(null);
         setError(toDisplayError(err));
       })
       .finally(() => setPending(false));
+  };
+
+  const sign = async () => {
+    const tx = prepared?.transaction;
+    if (!address || !tx) return;
+    setExecution({ phase: "signing" });
+    try {
+      const signed = await wallet.signTransaction(tx.bytes);
+      if (signed.bytes !== tx.bytes) throw new Error("The wallet returned different transaction bytes than the ones Guardian simulated, so nothing was sent.");
+      setExecution({ phase: "broadcasting" });
+      const result = await fetchJson<ExecutionResult>("/api/transactions/execute", undefined, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ address, transaction: tx.bytes, signature: signed.signature, ticket: tx.ticket }),
+      });
+      setExecution({ phase: "done", result });
+    } catch (err) {
+      setExecution({ phase: "error", error: toDisplayError(err) });
+    }
   };
 
   const askAi = () => {
@@ -80,24 +119,39 @@ export function AssessView() {
     <PageContainer className="max-w-[1320px]">
       <PageHeader
         title="Transfer check"
-        description="Evaluate a hypothetical transfer before you make it, across Protect, Save, Invest and your memory."
+        description={
+          live
+            ? "Check a transfer across Protect, Save, Invest and your memory, then sign it in your wallet if you choose."
+            : "Evaluate a hypothetical transfer before you make it, across Protect, Save, Invest and your memory."
+        }
       />
       <div className="mb-6 rounded-lg border border-border bg-surface px-4 py-3 text-[13px]">
-        <span className="font-medium">Simulation only.</span>{" "}
-        <span className="text-muted-foreground">
-          Guardian does not build, sign or send transactions, and it cannot block transfers made in your wallet. Gas figures are estimates from this wallet&apos;s history, not quotes.
-        </span>
+        {live ? (
+          <>
+            <span className="font-medium">Check, simulate, then sign.</span>{" "}
+            <span className="text-muted-foreground">
+              Guardian builds the transfer and simulates it on a Sui node through Tatum. Nothing is sent until you approve it in {wallet.wallet?.name ?? "your wallet"}. Guardian never holds keys and cannot block transfers made outside this page.
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="font-medium">Simulation only.</span>{" "}
+            <span className="text-muted-foreground">
+              Guardian does not sign or send transactions for a watched address, and it cannot block transfers made in your wallet. Gas figures are estimates from this wallet&apos;s history, not quotes. Connect this address&apos;s wallet to check and sign a real transfer.
+            </span>
+          </>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
         <div className="lg:sticky lg:top-6 lg:self-start">
-          <Panel title="Hypothetical transfer">
+          <Panel title={live ? "Transfer" : "Hypothetical transfer"}>
             {portfolio.state.status === "loading" ? (
               <TableSkeleton rows={3} cols={2} />
             ) : portfolio.state.status === "error" ? (
               <ErrorState error={portfolio.state.error} onRetry={portfolio.refresh} />
             ) : (
-              <AssessForm key={address} address={address} assets={assets} pending={pending} onSubmit={run} />
+              <AssessForm key={address} address={address} assets={assets} pending={pending} onSubmit={run} submitLabel={live ? "Check and simulate" : undefined} />
             )}
           </Panel>
         </div>
@@ -121,6 +175,7 @@ export function AssessView() {
           {!pending && result && (
             <>
               <VerdictBand a={result} />
+              {prepared && wallet.wallet && <SignPanel key={prepared.transaction?.digest ?? prepared.assessment.generatedAt} p={prepared} walletName={wallet.wallet.name} state={execution} onSign={sign} />}
               <FindingsByCategory a={result} />
               <PillarPanels a={result} />
               <Panel

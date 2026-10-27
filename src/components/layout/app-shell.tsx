@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { AppSidebar, SidebarNav, Wordmark } from "./app-sidebar";
 import { AddressBar } from "./address-bar";
 import { CopilotPanel } from "./copilot-panel";
+import { WalletButton } from "./wallet-button";
 import { IntegrationStatus, NetworkBadge } from "./integration-status";
 import { useCopilot } from "@/components/copilot/copilot-context";
 
@@ -49,6 +50,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <AddressBar />
           </div>
           <NetworkBadge />
+          <WalletButton />
           <Button
             variant={copilotOpen ? "secondary" : "ghost"}
             size="sm"

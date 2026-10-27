@@ -197,14 +197,22 @@ export class SuiTatumProvider implements BlockchainProvider {
 }
 
 let provider: SuiTatumProvider | undefined;
+let tatumClient: TatumGrpcClient | undefined;
 
-/** Process-wide provider built from validated env. Throws ConfigError if Tatum is not configured. */
-export function getSuiProvider(): SuiTatumProvider {
-  if (provider) return provider;
+/** The shared Tatum transport; the SDK client in sui.sdk.ts throttles through it too. Throws ConfigError if Tatum is not configured. */
+export function getTatumGrpcClient(): TatumGrpcClient {
+  if (tatumClient) return tatumClient;
   const e = env();
   if (!e.tatum.apiKey) {
     throw new ConfigError("Tatum is not configured. Set TATUM_API_KEY (a Sui Testnet key) in .env.local.", "CONFIG_MISSING");
   }
-  provider = new SuiTatumProvider(new TatumGrpcClient(e.tatum.grpcEndpoint, e.tatum.apiKey, e.tatum.maxRequestsPerSecond, new SharedRequestBudget(getKv, e.tatum.maxRequestsPerSecond)), e.network);
+  tatumClient = new TatumGrpcClient(e.tatum.grpcEndpoint, e.tatum.apiKey, e.tatum.maxRequestsPerSecond, new SharedRequestBudget(getKv, e.tatum.maxRequestsPerSecond));
+  return tatumClient;
+}
+
+/** Process-wide provider built from validated env. Throws ConfigError if Tatum is not configured. */
+export function getSuiProvider(): SuiTatumProvider {
+  if (provider) return provider;
+  provider = new SuiTatumProvider(getTatumGrpcClient(), env().network);
   return provider;
 }

@@ -129,6 +129,12 @@ export class TatumGrpcClient {
     return meta;
   }
 
+  /** Waits for a request slot under the same spacing and shared budget as this client's own calls. */
+  async throttle(): Promise<void> {
+    await this.spacer.acquire();
+    await this.budget?.acquire();
+  }
+
   private service(name: "ledger" | "state") {
     return name === "ledger" ? this.ledger : this.state;
   }

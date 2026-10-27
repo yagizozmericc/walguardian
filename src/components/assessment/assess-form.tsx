@@ -27,11 +27,13 @@ export function AssessForm({
   assets,
   pending,
   onSubmit,
+  submitLabel = "Check this transfer",
 }: {
   address: string;
   assets: AssetOption[];
   pending: boolean;
   onSubmit: (input: TransferInput) => void;
+  submitLabel?: string;
 }) {
   const [recipient, setRecipient] = useState("");
   const [coinType, setCoinType] = useState(assets[0]?.coinType ?? "");
@@ -132,7 +134,7 @@ export function AssessForm({
       </div>
       {error && <p className="text-xs text-critical">{error}</p>}
       <Button type="submit" disabled={pending || !coinType}>
-        {pending ? "Checking…" : "Check this transfer"}
+        {pending ? "Checking…" : submitLabel}
       </Button>
     </form>
   );

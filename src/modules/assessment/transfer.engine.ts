@@ -37,6 +37,9 @@ export const NOT_APPLICABLE_BEFORE_EXECUTION = [
   "First-time Move package use: a simulated plain transfer calls no package, and the commands of a real transaction are unknown until it is built.",
 ];
 
+/** Title of the historical-estimate gas finding; a successful node simulation supersedes it. */
+export const INSUFFICIENT_GAS_TITLE = "Insufficient estimated SUI gas for this simulation";
+
 /** Gas buffer kept by the conservative "Max" amount, as a multiple of the median estimate. */
 export const GAS_BUFFER_MULTIPLIER = 2n;
 
@@ -225,7 +228,7 @@ export function assessTransfer(input: AssessmentInput): AssessmentResult {
         pillar: "save",
         category: "fact",
         level: "critical",
-        title: "Insufficient estimated SUI gas for this simulation",
+        title: INSUFFICIENT_GAS_TITLE,
         detail: `${isSui ? "After the amount entered, the wallet would hold" : "The wallet holds"} ${formatAmount(formatUnits(suiAfterTransfer > 0n ? suiAfterTransfer : 0n, 9), 9)} SUI, below the estimated gas of ${gasText}${isSui ? "" : ` needed even though the asset is ${asset.symbol ?? "a token"}`}. The estimate is the wallet's median past fee (${input.gas.samples} transactions), not a quote.`,
       });
     } else {
@@ -452,7 +455,7 @@ export function assessTransfer(input: AssessmentInput): AssessmentResult {
   const counts = (cat: Finding["category"]) => findings.filter((x) => x.category === cat && x.level !== "info").length;
   const TITLES: Record<Verdict, string> = {
     insufficient_balance: "Insufficient balance for this simulation",
-    insufficient_gas: "Insufficient estimated SUI gas for this simulation",
+    insufficient_gas: INSUFFICIENT_GAS_TITLE,
     review_carefully: "Review carefully before sending",
     proceed_with_caution: "Proceed with caution",
     no_issues_found: "No issues found in the available data",

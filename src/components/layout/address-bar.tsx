@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, X } from "lucide-react";
+import { Eye, Wallet, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useWallet } from "@/components/providers/wallet-context";
 import { useWatchAddress } from "@/components/providers/watch-context";
 import { SuiAddressSchema, shortAddress } from "@/lib/sui-address";
 import { useIntegrationStatus } from "./use-integration-status";
@@ -11,6 +12,8 @@ import { useIntegrationStatus } from "./use-integration-status";
 /** Watch-only address entry. Entering an address never proves ownership. */
 export function AddressBar() {
   const { address, setAddress } = useWatchAddress();
+  const { account, wallet } = useWallet();
+  const connected = Boolean(address && account?.address === address);
   const { data: status } = useIntegrationStatus();
   const demo = status?.demo;
   const [draft, setDraft] = useState("");
@@ -19,13 +22,23 @@ export function AddressBar() {
   if (address) {
     return (
       <div className="flex min-w-0 items-center gap-2">
-        <span
-          className="inline-flex items-center gap-1.5 rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground"
-          title="Watch-only: public onchain data. Ownership is not verified."
-        >
-          <Eye className="size-3" />
-          Watch-only
-        </span>
+        {connected ? (
+          <span
+            className="inline-flex items-center gap-1.5 rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground"
+            title={`Connected through ${wallet?.name ?? "a wallet"}. Transfers you check here can be signed in that wallet; memory access is unchanged.`}
+          >
+            <Wallet className="size-3" />
+            Connected
+          </span>
+        ) : (
+          <span
+            className="inline-flex items-center gap-1.5 rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground"
+            title="Watch-only: public onchain data. Ownership is not verified."
+          >
+            <Eye className="size-3" />
+            Watch-only
+          </span>
+        )}
         <span className="truncate font-mono text-[13px]" title={address}>
           {shortAddress(address, 6)}
         </span>
