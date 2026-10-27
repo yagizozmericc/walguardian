@@ -10,6 +10,7 @@ import { DEMO_WALLET_LABEL, demoWalletAddress } from "@/lib/demo";
 import { getKv } from "@/lib/kv";
 
 let llmHealth: { at: number; item: IntegrationStatusItem } | null = null;
+let walrusHealth: { at: number; item: IntegrationStatusItem } | null = null;
 
 /** Model metadata check (no generation), cached for 10 minutes. */
 async function llmStatus(): Promise<IntegrationStatusItem> {
@@ -28,12 +29,25 @@ async function memoryStatus(): Promise<IntegrationStatusItem> {
   const info = memoryProviderInfo();
   if (info.provider === "disabled") return { ...base, state: "not_configured", detail: info.detail };
   if (info.provider === "mock") return { ...base, state: "mock", detail: `${info.label}: ${info.detail}` };
+  if (walrusHealth && Date.now() - walrusHealth.at < 60_000) return walrusHealth.item;
+  let item: IntegrationStatusItem;
   try {
-    const h = await getMemoryClient().health();
-    return { ...base, state: h.status === "ok" ? "connected" : "error", detail: `${info.label}: ${h.detail}` };
+    // /health is unauthenticated and does not exercise storage, so it can report ok while reads fail
+    // (walrus-memory#1285). An authenticated listing is the honest signal; it reads metadata only.
+    const client = getMemoryClient();
+    const h = await client.health();
+    const cfg = env().memory;
+    const ns = `${cfg.provider === "disabled" ? "guardian" : cfg.namespacePrefix}-status`;
+    await client.listMemories({ namespace: ns });
+    // Recall depends on the relayer's embedding service, which can fail while listing works.
+    await client.recall({ query: "status check", namespace: ns, limit: 1 });
+    const writes = info.writes.enabled ? "writes enabled" : "read-only";
+    item = { ...base, state: h.status === "ok" ? "connected" : "error", detail: `${info.label}: ${h.detail}; authenticated listing and recall ok; ${writes}.` };
   } catch (err) {
-    return { ...base, state: "error", detail: err instanceof AppError ? err.message : "Health check failed." };
+    item = { ...base, state: "error", detail: err instanceof AppError ? err.message : "Walrus Memory check failed." };
   }
+  walrusHealth = { at: Date.now(), item };
+  return item;
 }
 
 async function redisStatus(): Promise<IntegrationStatusItem> {

@@ -112,8 +112,9 @@ export class MemoryService {
   /** Every record this principal can see, with its status, across categories. */
   async history(): Promise<MemoryHistoryEntry[]> {
     const nowMs = this.now().getTime();
-    const out: MemoryHistoryEntry[] = [];
-    for (const category of MEMORY_CATEGORIES) {
+    // Categories are independent namespaces; read them in parallel (sequential reads add up to seconds on the relayer).
+    const perCategory = await Promise.all(MEMORY_CATEGORIES.map(async (category) => {
+      const out: MemoryHistoryEntry[] = [];
       const ns = this.namespace(category);
       const [listed, recalled] = await Promise.all([
         this.client.listMemories({ namespace: ns }),
@@ -135,8 +136,9 @@ export class MemoryService {
         if (!expired && record) status = record.deleted ? "deleted" : latest.get(record.entityId)?.id === record.id ? "current" : "superseded";
         out.push({ blobId: m.blob_id, status, createdAt: record?.createdAt ?? m.created_at, expiresAt: m.expires_at, record: withExpiry });
       }
-    }
-    return out.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+      return out;
+    }));
+    return perCategory.flat().sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   }
 
   /** Memories most relevant to a question, for assessments and future AI explanations (provider ranking). */
