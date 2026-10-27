@@ -60,10 +60,16 @@ describe("parseEnv", () => {
     });
     it("accepts the Testnet relayer and refuses Mainnet without explicit approval", () => {
       const walrus = { MEMORY_PROVIDER: "walrus", SESSION_SECRET: secret, MEMWAL_PRIVATE_KEY: "k", MEMWAL_ACCOUNT_ID: "0x1" };
-      expect(parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://relayer-staging.memory.walrus.xyz/" }).memory).toMatchObject({ provider: "walrus", network: "testnet" });
+      expect(parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://relayer.dev.memwal.ai/" }).memory).toMatchObject({ provider: "walrus", network: "testnet" });
       expect(() => parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://relayer.memory.walrus.xyz" })).toThrow(/ALLOW_WALRUS_MAINNET/);
       expect(() => parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://example.com" })).toThrow(ConfigError);
       expect(parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://relayer.memory.walrus.xyz", ALLOW_WALRUS_MAINNET: "true" }).memory).toMatchObject({ network: "mainnet" });
+    });
+    it("refuses the retired staging relayer with the replacement named", () => {
+      const walrus = { MEMORY_PROVIDER: "walrus", SESSION_SECRET: secret, MEMWAL_PRIVATE_KEY: "k", MEMWAL_ACCOUNT_ID: "0x1" };
+      expect(() => parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://relayer-staging.memory.walrus.xyz" })).toThrow(/retired.*https:\/\/relayer\.dev\.memwal\.ai/);
+      // Even with the Mainnet switch on, a retired host is never treated as an "unknown" relayer.
+      expect(() => parseEnv({ ...walrus, MEMWAL_SERVER_URL: "https://relayer-staging.memory.walrus.xyz/", ALLOW_WALRUS_MAINNET: "true" })).toThrow(/retired/);
     });
     it("requires credentials for walrus", () => {
       expect(() => parseEnv({ MEMORY_PROVIDER: "walrus", SESSION_SECRET: secret })).toThrow(/requires/);

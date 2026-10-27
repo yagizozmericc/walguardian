@@ -49,7 +49,9 @@ export type LlmConfig =
   | { provider: "gemini"; apiKey: string; model: string; maxOutputTokens: number; ratePerMinute: number; ratePerDay: number };
 
 /** Hosted relayers listed in the Walrus Memory docs. */
-export const WALRUS_TESTNET_RELAYER = "https://relayer-staging.memory.walrus.xyz";
+export const WALRUS_TESTNET_RELAYER = "https://relayer.dev.memwal.ai";
+/** Retired Testnet ("staging") relayer, replaced by relayer.dev.memwal.ai (walrus-memory PR #1321). */
+const RETIRED_WALRUS_RELAYERS = ["https://relayer-staging.memory.walrus.xyz"];
 export const WALRUS_MAINNET_RELAYER = "https://relayer.memory.walrus.xyz";
 
 /**
@@ -189,6 +191,9 @@ function parseMemoryConfig(e: z.infer<typeof EnvSchema>, vercel: boolean): Memor
   }
   const serverUrl = e.MEMWAL_SERVER_URL.replace(/\/+$/, "");
   if (!/^https:\/\//.test(serverUrl)) throw new ConfigError("MEMWAL_SERVER_URL must use https.");
+  if (RETIRED_WALRUS_RELAYERS.includes(serverUrl)) {
+    throw new ConfigError(`MEMWAL_SERVER_URL points to the retired Walrus Memory staging relayer. Use ${WALRUS_TESTNET_RELAYER} for Testnet.`);
+  }
   const network = serverUrl === WALRUS_TESTNET_RELAYER ? "testnet" : serverUrl === WALRUS_MAINNET_RELAYER ? "mainnet" : "unknown";
   if (network !== "testnet" && e.ALLOW_WALRUS_MAINNET !== "true") {
     throw new ConfigError(
